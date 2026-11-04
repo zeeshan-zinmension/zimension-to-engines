@@ -935,16 +935,24 @@ namespace Zimension.Core
                 TriggerEvent(m_World.Items[item].Animations[card].FinishedEvent, item);
         }
 
-        /// <summary>A sound card finished playing (not stopped): soundFinishedEvent. item -1 is the world bank.</summary>
-        public void SoundFinished(int item, int card)
+        /// <summary>
+        /// A sound track (slot in the owner's sounds array) finished playing naturally, not stopped
+        /// and not looping. As getSoundFinishedEvent: the last card on that track with a
+        /// soundFinishedEvent names the event. item -1 is the world bank.
+        /// </summary>
+        public void SoundTrackFinished(int item, int track)
         {
-            if (item < 0)
+            if (track < 0) return;
+            List<EventCard> cards = item < 0 ? m_World.Sounds : item < m_World.Items.Count ? m_World.Items[item].Sounds : null;
+            if (cards == null) return;
+            string eventName = "";
+            foreach (var card in cards)
             {
-                if (card >= 0 && card < m_World.Sounds.Count) TriggerEvent(m_World.Sounds[card].FinishedEvent);
-                return;
+                if (card.Sound != track) continue;
+                var name = Trim(card.FinishedEvent);
+                if (name.Length > 0) eventName = name;
             }
-            if (item < m_World.Items.Count && card >= 0 && card < m_World.Items[item].Sounds.Count)
-                TriggerEvent(m_World.Items[item].Sounds[card].FinishedEvent, item);
+            if (eventName.Length > 0) TriggerEvent(eventName, item);
         }
 
         /// <summary>Show or remove an item from outside the flows (Unity scripts).</summary>

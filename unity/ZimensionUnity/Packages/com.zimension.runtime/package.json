@@ -1,0 +1,21 @@
+{
+  "name": "com.zimension.runtime",
+  "version": "0.1.0",
+  "displayName": "Zimension Runtime",
+  "description": "Imports a Zimension project (the editor's Web export: masterData.json and assets) into editable Unity scenes and runs its events, logic flows, transitions, sounds, animations, lip sync, player and HUD with ordinary Unity components.",
+  "unity": "6000.0",
+  "author": {
+    "name": "Zimension"
+  },
+  "dependencies": {
+    "com.unity.cloud.gltfast": "6.20.0",
+    "com.unity.modules.animation": "1.0.0",
+    "com.unity.modules.audio": "1.0.0",
+    "com.unity.modules.physics": "1.0.0",
+    "com.unity.modules.imgui": "1.0.0",
+    "com.unity.modules.jsonserialize": "1.0.0",
+    "com.unity.modules.unitywebrequest": "1.0.0",
+    "com.unity.modules.unitywebrequestaudio": "1.0.0"
+  },
+  "keywords": ["zimension", "gltf", "exporter", "events"]
+}

@@ -415,8 +415,10 @@ static class Program
         Expect(!host.Sounds.Any(s => s.play), "a re-trigger restarts the sequenced timer");
         r.Update(0.25f, far);
         Expect(host.Sounds.Count(s => s.play) == 1, "sequenced sound plays once");
-        r.SoundFinished(0, 0);
-        Expect(Count(host.Ui, "done") == 1, "sound finished event");
+        r.SoundTrackFinished(0, 0);
+        Expect(Count(host.Ui, "done") == 1, "sound finished event (by track)");
+        r.SoundTrackFinished(0, 1);
+        Expect(Count(host.Ui, "done") == 1, "another track has no finished event");
         Expect(host.Visible[1] == false, "spawn-event item starts hidden");
         r.TriggerEvent("show"); Expect(host.Visible[1], "hidden item receives its show event");
         r.TriggerEvent("hide"); r.TriggerEvent("show"); Expect(host.Visible[1], "item can be hidden and shown again");

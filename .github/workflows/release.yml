@@ -1,0 +1,33 @@
+name: Release Unity project
+
+# Tag vX.Y.Z to publish ZimensionUnity-<version>.zip (the ready-to-open Unity project) as a
+# GitHub release asset. Every push also uploads it as a workflow artifact for testing.
+on:
+  push:
+    tags: ["v*"]
+    branches: ["**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package .meta files are complete
+        run: python3 tools/generate_metas.py --check
+      - name: Package the Unity project
+        run: python3 tools/package_template.py --out out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ZimensionUnity
+          path: out/*.zip
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${GITHUB_REF_NAME}" >/dev/null 2>&1 || gh release create "${GITHUB_REF_NAME}" --title "${GITHUB_REF_NAME}" --notes "Ready-to-open Zimension Unity project. Unzip, open ZimensionUnity in Unity Hub (Unity 6.3 LTS), then Zimension > Import from Zimension."
+          gh release upload "${GITHUB_REF_NAME}" out/*.zip --clobber

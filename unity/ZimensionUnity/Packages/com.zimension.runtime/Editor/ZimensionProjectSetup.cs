@@ -110,7 +110,7 @@ namespace Zimension.Editor
 
     /// <summary>
     /// Command-line import for automation:
-    /// <code>Unity.exe -batchmode -projectPath &lt;project&gt; -executeMethod Zimension.Editor.BatchImport.Run -zimensionExport &lt;export.zip&gt; -logFile import.log</code>
+    /// <code>Unity.exe -batchmode -projectPath &lt;project&gt; -executeMethod Zimension.Editor.BatchImport.Run -zimensionExport &lt;export.zip | folder | link | code&gt; [-zimensionApi &lt;api base&gt;] -logFile import.log</code>
     /// Exits with 0 on success, 1 on failure or blocking findings (see export-report.json). Do not
     /// combine with -quit: the method exits the editor itself once the import has finished.
     /// </summary>
@@ -125,8 +125,14 @@ namespace Zimension.Editor
                 string bundle = null;
                 for (int i = 0; i < args.Length - 1; i++)
                     if (args[i] == "-zimensionExport" || args[i] == "-zimensionBundle") bundle = args[i + 1];
-                if (string.IsNullOrEmpty(bundle)) { Debug.LogError("[Zimension] Pass -zimensionExport <path to the Web export .zip or folder>."); return; }
-                var result = ZimensionImporter.Import(Path.GetFullPath(bundle), new ZimensionImporter.Options { OpenBaseScene = false, ShowProgress = false });
+                for (int i = 0; i < args.Length - 1; i++)
+                    if (args[i] == "-zimensionApi") ZimensionLinkImport.ApiBase = args[i + 1];
+                if (string.IsNullOrEmpty(bundle)) { Debug.LogError("[Zimension] Pass -zimensionExport <export .zip, folder, Zimension link or code>."); return; }
+                var options = new ZimensionImporter.Options { OpenBaseScene = false, ShowProgress = false };
+                bool local = File.Exists(bundle) || Directory.Exists(bundle);
+                var result = local
+                    ? ZimensionImporter.Import(Path.GetFullPath(bundle), options)
+                    : ZimensionLinkImport.ImportBlocking(bundle, options);
                 if (result.Success) exit = 0;
                 else Debug.LogError("[Zimension] " + result.Error);
             }

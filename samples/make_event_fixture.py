@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Writes samples/event-fixture: a small Zimension export (masterData.json, Basics shapes only, no
 binary assets) exercising the event workflow end to end. Import the folder (or a zip of it) with
-Zimension > Import Zimension Export in Unity, then press Play.
+Zimension > Import from Zimension (tab "From a file") in Unity, then press Play.
 
 Walkthrough: walk onto the gold coin (auto pickup: coins + 1, score + 10), walk to the red button
 and press F (message, then the door rises 1 s later), when the door has finished opening a

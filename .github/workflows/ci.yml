@@ -20,8 +20,15 @@ jobs:
         run: |
           python3 samples/make_event_fixture.py
           git diff --exit-code samples/
-      - name: Event core regression checks
+      - name: Event core, export reader and link downloader checks
         run: dotnet run --project tests/Zimension.Core.Tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Reference export server contract checks
+        run: node tools/dev-export-server.test.mjs
+      - name: Link import end to end (reference server -> Unity downloader)
+        run: tools/e2e-link.sh
       - name: Fetch Unity reference assemblies
         run: tools/compile-check/fetch-refs.sh .unity-refs
       - name: Compile runtime against UnityEngine

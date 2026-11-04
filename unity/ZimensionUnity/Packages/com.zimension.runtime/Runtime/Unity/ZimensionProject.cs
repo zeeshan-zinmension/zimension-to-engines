@@ -37,6 +37,9 @@ namespace Zimension.Unity
         public string worldName;
         public string exporterVersion;
         public string importedAtUtc;
+        [Tooltip("Export version this import came from (from a Zimension link). The link itself is kept in Library/, never in Assets or builds.")]
+        public string sourceVersion;
+        public string sourceSha256;
 
         [Header("World document (editable)")]
         [Tooltip("The saved world object from masterData.json: events, eventBroadcasters, variables, avatar, playerSettings, sounds, soundTriggers, ...")]

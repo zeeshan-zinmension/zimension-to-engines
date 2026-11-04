@@ -102,6 +102,38 @@ shared regression cases are what catch it when one side drifts.
   GUIDs (a file is rewritten only when its content changes), and `Assets/Zimension/UserContent`
   is never touched.
 
+## Link import
+
+`ExportDownloader` (Editor assembly, engine-free, `System.Net.Http`) turns what the user pastes
+into a verified local zip:
+
+1. **Classify the input:**
+   * a local file or folder;
+   * a bare code: resolved against the API base, `https://api.zimension3d.com/api/v1` by default;
+   * an API link (`/world/unity-export/link/<code>`);
+   * a web URL carrying `/unity-export/<code>`;
+   * any other URL, treated as a direct zip.
+2. **Resolve:** `GET /world/unity-export/link/:code` returns the version, size, SHA-256 and a
+   download URL ([backend contract](BACKEND_UNITY_EXPORT.md)).
+3. **Download:**
+   * into `Library/ZimensionDownloads/<link hash>/export.zip.part`;
+   * resumes with `Range`/`If-Range`;
+   * retries network errors, 408/429 and 5xx with backoff;
+   * aborts stalled transfers;
+   * a version that changes mid-download is detected from its ETag, then the link is re-resolved
+     once.
+4. **Verify:** size, SHA-256, and that the file is a zip containing `masterData.json`. Only then
+   is it renamed to `export.zip`. An already-verified version is reused without downloading.
+5. **Import** on the main thread with the normal importer.
+
+Links are capabilities. They are remembered per machine in
+`Library/ZimensionDownloads/links.json`, never in `Assets/` (version control) or in builds; the
+`ZimensionProject` keeps only `sourceVersion`/`sourceSha256`. **Pull latest** re-resolves the
+remembered link, and stops at "already up to date" when the checksum matches.
+
+`tests/Zimension.Core.Tests` runs the downloader against an in-process server that injects
+faults. `tools/e2e-link.sh` runs it against the reference server `tools/dev-export-server.mjs`.
+
 ## Import pipeline
 
 1. `BundleSource` opens the export zip or folder and finds `masterData.json`. It normalizes the

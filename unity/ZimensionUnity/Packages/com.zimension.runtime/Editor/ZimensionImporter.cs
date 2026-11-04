@@ -28,7 +28,7 @@ namespace Zimension.Editor
     /// </summary>
     public static class ZimensionImporter
     {
-        public const string Version = "0.1.0";
+        public const string Version = ZimensionImporterVersion.Value;
         public const string Root = "Assets/Zimension";
         public const string SourceRoot = Root + "/SourceAssets";
         public const string GeneratedRoot = Root + "/Generated";
@@ -70,8 +70,6 @@ namespace Zimension.Editor
             public string AssetFor(string entry) => entry != null && Staged.TryGetValue(entry, out var path) ? path : null;
         }
 
-        [MenuItem("Zimension/Import Zimension Export...", priority = 1)]
-        public static void ImportInteractive() => ZimensionImportWindow.Open();
 
         public static Result Import(string bundlePath, Options options = null)
         {

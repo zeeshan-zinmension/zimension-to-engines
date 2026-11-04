@@ -89,8 +89,11 @@ static class Program
     const string Prize = @"{""_id"": ""prize"", ""name"": ""Prize"", ""spawnEvent"": ""win""}";
     const string Plain = @"{""_id"": ""rock"", ""name"": ""Rock""}";
 
-    static int Main()
+    static int Main(string[] args)
     {
+        // End-to-end mode: fetch a link from a running server (tools/dev-export-server.mjs) and validate it.
+        // dotnet run --project tests/Zimension.Core.Tests -- --fetch <link|code> --api <api base>
+        if (args.Length >= 2 && args[0] == "--fetch") return Fetch(args);
         try
         {
             Values();
@@ -106,6 +109,7 @@ static class Program
             CoordinateChecks();
             BundleChecks.Run(Expect);
             FixtureChecks.Run(Expect);
+            DownloadChecks.Run(Expect);
         }
         catch (Exception error)
         {
@@ -116,6 +120,28 @@ static class Program
         Console.WriteLine($"Event checks passed ({s_Checks}): values, flows, conditions, switch, delays, local scope, collect, interaction, transition, reset; " +
                           "unified targets, live bounds, solid surface triggers, contact collection, vehicle proxy ranges, diagnostics, paths, scene carry, waypoints, coordinates.");
         return 0;
+    }
+
+    static int Fetch(string[] args)
+    {
+        string api = Zimension.Editor.ExportDownloader.DefaultApiBase;
+        for (int i = 2; i < args.Length - 1; i++) if (args[i] == "--api") api = args[i + 1];
+        var cache = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "zim-e2e-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var downloader = new Zimension.Editor.ExportDownloader(new Zimension.Editor.ExportDownloader.Options { ApiBase = api, CacheRoot = cache });
+            var result = downloader.FetchAsync(args[1], null, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            using (var bundle = Zimension.Editor.BundleSource.Open(result.Path))
+            {
+                var master = JsonNode.Parse(bundle.MasterDataText);
+                Console.WriteLine($"Fetched '{result.WorldName}' version {result.Version}: {result.Size} bytes, sha256 {result.Sha256.Substring(0, 12)}..., world '{master.Obj("world").Str("name")}', {master["worldItems"].Count} items");
+            }
+            var again = downloader.FetchAsync(args[1], null, System.Threading.CancellationToken.None).GetAwaiter().GetResult();
+            Console.WriteLine(again.FromCache ? "Second fetch reused the verified cache." : "Second fetch downloaded again.");
+            return again.FromCache ? 0 : 1;
+        }
+        catch (Exception e) { Console.Error.WriteLine("Fetch failed: " + e.Message); return 1; }
+        finally { Zimension.Editor.ExportDownloader.ClearCache(cache); }
     }
 
     static void Values()

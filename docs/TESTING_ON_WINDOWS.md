@@ -37,7 +37,7 @@ project from Hub's **Universal 3D** template instead, and add the package from d
 
 ## 3. Sample fixture (no account or network)
 
-1. *Zimension → Import Zimension Export… → Folder…* → `zimension-to-engines/samples/event-fixture` → **Import**.
+1. *Zimension → Import from Zimension… → From a file → Folder…* → `zimension-to-engines/samples/event-fixture` → **Import**.
 2. The scene `Assets/Zimension/Generated/Event_Fixture/Scenes/...Base_Courtyard.unity` opens. Press **Play**, then **Start**.
 
 **Gate B:** each of these should happen:
@@ -52,12 +52,39 @@ project from Hub's **Universal 3D** template instead, and add the package from d
 | F3 | Diagnostics: recent events, variables, interaction target |
 | P | Pause screen; Restart resets the world (coin back, door down, reward hidden, on_start message again) |
 
-## 4. Your worlds
+## 4. Link import (before the backend exists)
 
-1. In Zimension (the `unity-export` web branch), open the project and save it. Then use
-   *Export → Unity*. On the current production build, *Export → Web* works too.
-2. Import the zip in Unity as above. Read the summary, and
-   `Assets/Zimension/Generated/<world>/export-report.json`.
+The reference server stands in for the backend. It needs Node.js 18 or later.
+
+```bash
+node tools/dev-export-server.mjs --publish samples/event-fixture --world event-fixture
+```
+
+It prints a **Code** and a **Link**. In Unity, open *Zimension → Import from Zimension… → From a Zimension link*:
+
+1. Paste the **Link** (`http://localhost:8787/api/v1/world/unity-export/link/<code>`) → **Download and import**.
+2. Paste just the **Code**, after setting *Advanced → API base* to `http://localhost:8787/api/v1`.
+   Set it back to the Zimension server afterwards.
+
+**Gate L:**
+
+| Check | Expected |
+|---|---|
+| First import | The progress bar shows download, then verification, then import; the fixture opens and plays as in step 3. |
+| *Pull latest* (under "Imported from links") with no new export | "already up to date"; no download. |
+| Publish again (stop the server, run the same command with the same `--data` folder), then *Pull latest* | The new version downloads and re-imports. |
+| Cancel during a download, then *Download and import* again | The download resumes, and the import completes. |
+| A wrong code | "Export link not found ..." |
+| `Library/ZimensionDownloads/links.json` | Holds the link. Nothing under `Assets/` contains the link. |
+
+## 5. Your worlds
+
+1. In Zimension (the `unity-export` web branch), open the project and save it, then use
+   *Export → Unity*.
+   * While the backend has no link endpoints, the panel says links are not available yet and
+     downloads the zip instead. Import it with **From a file**.
+   * On the current production build, *Export → Web* works too.
+2. Read the import summary, and `Assets/Zimension/Generated/<world>/export-report.json`.
 
 **Gate C**, per world:
 
@@ -79,7 +106,7 @@ project from Hub's **Universal 3D** template instead, and add the package from d
 Report back with the import summary and `export-report.json` for anything that's wrong. Include
 the Console log (Editor.log) for import errors.
 
-## 5. Build a player
+## 6. Build a player
 
 *File → Build Profiles → Windows → Build*.
 
@@ -99,7 +126,7 @@ GameCI. To enable it:
 
 The job has not run yet.
 
-Batch import on your machine:
+Batch import on your machine. `-zimensionExport` also takes a link or a code (with `-zimensionApi <api base>`):
 
 ```bash
 "C:\Program Files\Unity\Hub\Editor\6000.3.26f1\Editor\Unity.exe" -batchmode -projectPath unity\ZimensionUnity -executeMethod Zimension.Editor.BatchImport.Run -zimensionExport samples\event-fixture -logFile import.log

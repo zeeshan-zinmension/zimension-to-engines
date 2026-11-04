@@ -9,6 +9,8 @@
   },
   "dependencies": {
     "com.unity.cloud.gltfast": "6.20.0",
+    "com.unity.cloud.draco": "5.6.0",
+    "com.unity.cloud.ktx": "3.8.0",
     "com.unity.modules.animation": "1.0.0",
     "com.unity.modules.audio": "1.0.0",
     "com.unity.modules.physics": "1.0.0",
@@ -17,5 +19,10 @@
     "com.unity.modules.unitywebrequest": "1.0.0",
     "com.unity.modules.unitywebrequestaudio": "1.0.0"
   },
-  "keywords": ["zimension", "gltf", "exporter", "events"]
+  "keywords": [
+    "zimension",
+    "gltf",
+    "exporter",
+    "events"
+  ]
 }

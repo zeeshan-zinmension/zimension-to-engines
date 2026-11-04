@@ -107,6 +107,9 @@ namespace Zimension.Unity
             var name = card.Str("animationName");
             if (!string.IsNullOrEmpty(name))
             {
+                var names = m_Item.clipNames;
+                if (names != null)
+                    for (int i = 0; i < names.Length && i < clips.Length; i++) if (clips[i] && names[i] == name) return i;
                 for (int i = 0; i < clips.Length; i++) if (clips[i] && clips[i].name == name) return i;
                 // Library clips are imported as "Name [sourceId:index]"; a bare name may still match the first of them.
                 for (int i = 0; i < clips.Length; i++) if (clips[i] && clips[i].name.StartsWith(name + " [", StringComparison.Ordinal)) return i;

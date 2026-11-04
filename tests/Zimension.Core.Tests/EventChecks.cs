@@ -104,6 +104,8 @@ static class Program
             Waypoints();
             Extras();
             CoordinateChecks();
+            BundleChecks.Run(Expect);
+            FixtureChecks.Run(Expect);
         }
         catch (Exception error)
         {

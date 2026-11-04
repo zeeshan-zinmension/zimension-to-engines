@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  core:
+    name: Event core tests and compile checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Package .meta files are complete
+        run: python3 tools/generate_metas.py --check
+      - name: Sample export is up to date
+        run: |
+          python3 samples/make_event_fixture.py
+          git diff --exit-code samples/
+      - name: Event core regression checks
+        run: dotnet run --project tests/Zimension.Core.Tests
+      - name: Fetch Unity reference assemblies
+        run: tools/compile-check/fetch-refs.sh .unity-refs
+      - name: Compile runtime against UnityEngine
+        run: dotnet build tools/compile-check/Runtime.csproj -p:UnityRefs=$PWD/.unity-refs/engine
+      - name: Compile editor importer against UnityEditor
+        run: dotnet build tools/compile-check/Editor.csproj -p:UnityRefs=$PWD/.unity-refs/engine -p:UnityEditorRefs=$PWD/.unity-refs/editor
+
+  unity:
+    # Opens the template project in the pinned Unity editor, imports the sample export and builds a
+    # Windows player. Runs only when a Unity licence is configured as repository secrets
+    # (UNITY_LICENSE or UNITY_SERIAL, plus UNITY_EMAIL and UNITY_PASSWORD; see GameCI's activation docs).
+    name: Unity import and Windows build
+    needs: core
+    runs-on: ubuntu-latest
+    if: ${{ vars.UNITY_CI_ENABLED == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+      - uses: actions/cache@v4
+        with:
+          path: unity/ZimensionUnity/Library
+          key: Library-${{ hashFiles('unity/ZimensionUnity/Packages/**') }}
+      - name: Import the sample export (batch mode)
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: unity/ZimensionUnity
+          unityVersion: 6000.3.26f1
+          targetPlatform: StandaloneWindows64
+          buildMethod: Zimension.Editor.BatchImport.Run
+          customParameters: -zimensionExport ../../samples/event-fixture
+      - name: Build the Windows player
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+        with:
+          projectPath: unity/ZimensionUnity
+          unityVersion: 6000.3.26f1
+          targetPlatform: StandaloneWindows64
+          allowDirtyBuild: true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-player
+          path: build/StandaloneWindows64

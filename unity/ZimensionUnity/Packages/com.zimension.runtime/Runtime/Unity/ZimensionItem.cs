@@ -42,6 +42,8 @@ namespace Zimension.Unity
         public Transform modelRoot;
         [Tooltip("Clips available to this item's animation cards, in model order then library clips.")]
         public AnimationClip[] clips = Array.Empty<AnimationClip>();
+        [Tooltip("The name animation cards use for each clip (parallel to clips; empty uses the clip's own name).")]
+        public string[] clipNames = Array.Empty<string>();
         [Tooltip("Parallel to the saved sounds array; a removed/missing track keeps its slot as null.")]
         public AudioClip[] sounds = Array.Empty<AudioClip>();
         [Tooltip("Rhubarb lip-sync JSON per sound slot (voiceDataUrl).")]

@@ -364,6 +364,7 @@ namespace Zimension.Editor
             }
             // Clips: the model's own (glTF order, so animationIndex matches), then the cards' library clips.
             var clips = new List<AnimationClip>(ctx.ModelClips.TryGetValue(path, out var own) ? own : new List<AnimationClip>());
+            var clipNames = clips.Select(c => c ? c.name : "").ToList();
             if (item.Truthy("allowAnimations"))
             {
                 var sources = ZimensionImporter.SourceClipsByName(ctx, item["characterAnimationSources"]);
@@ -371,7 +372,7 @@ namespace Zimension.Editor
                 {
                     var clipName = card.Str("animationName");
                     if (card.Str("animationSource") == "default" || string.IsNullOrEmpty(clipName)) continue;
-                    if (clips.Any(c => c && c.name == clipName)) continue;
+                    if (clipNames.Contains(clipName)) continue;
                     AnimationClip library = null;
                     if (!sources.TryGetValue(clipName, out library)) ctx.LibraryByName.TryGetValue(clipName, out library);
                     if (!library)
@@ -385,16 +386,12 @@ namespace Zimension.Editor
                         ctx.Report.Add(ImportReport.Level.Approximated, $"Animation '{clipName}' does not fit this model's skeleton", "animations", item);
                         continue;
                     }
-                    if (bound != library)
-                    {
-                        // Keep the card's name so the runtime resolves it.
-                        bound.name = clipName;
-                        EditorUtility.SetDirty(bound);
-                    }
                     clips.Add(bound);
+                    clipNames.Add(clipName); // the card's name, so the runtime resolves it
                 }
             }
             zi.clips = clips.ToArray();
+            zi.clipNames = clipNames.ToArray();
             ApplyCustomizations(ctx, item, instance);
             if (item.Has("rpmRetargetProfile")) ctx.Report.Add(ImportReport.Level.Approximated, "Ready Player Me retarget profile offsets are approximated by bone-name binding", "rpmRetargetProfile", item);
             return true;

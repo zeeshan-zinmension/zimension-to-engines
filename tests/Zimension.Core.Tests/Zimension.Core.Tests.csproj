@@ -14,5 +14,9 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Runtime/Core/**/*.cs" />
+    <!-- Engine-free parts of the Editor importer: export reading and asset resolution. -->
+    <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Editor/BundleSource.cs" />
+    <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Editor/AssetResolver.cs" />
+    <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Editor/GltfInfo.cs" />
   </ItemGroup>
 </Project>

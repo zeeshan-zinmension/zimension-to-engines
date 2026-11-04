@@ -1,0 +1,632 @@
+{
+  "world": {
+    "_id": "fixture-world",
+    "name": "Event Fixture",
+    "showGround": true,
+    "size": 60,
+    "sunPosition": {
+      "x": 0.35,
+      "y": 0.25
+    },
+    "sunIntensity": 3,
+    "sunColor": "#fff4e0",
+    "spawnPosition": {
+      "x": 0,
+      "y": 0,
+      "z": 8
+    },
+    "avatar": {
+      "cameraType": "TPP",
+      "cameraDistance": 3.5,
+      "cameraHeight": 1.7,
+      "walkSpeed": 1,
+      "sprintSpeed": 1,
+      "jumpHeight": 1,
+      "rotation": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+      }
+    },
+    "events": [
+      "intro",
+      "button_pressed",
+      "open_door",
+      "door_opened",
+      "reward_show",
+      "need_coin",
+      "coin_collected"
+    ],
+    "variables": [
+      {
+        "name": "coins",
+        "dataType": "number",
+        "initialValue": 0
+      },
+      {
+        "name": "score",
+        "dataType": "number",
+        "initialValue": 0
+      }
+    ],
+    "eventBroadcasters": [
+      {
+        "name": "Intro",
+        "startEvent": "on_start",
+        "actionIndex": 0,
+        "actionType": "Trigger Events",
+        "triggerEvents": [
+          "intro"
+        ],
+        "showMessage": "Grab the gold coin, then press F at the red button.",
+        "link": ""
+      },
+      {
+        "name": "Button",
+        "startEvent": "button_pressed",
+        "actionIndex": 0,
+        "actionType": "Trigger Events",
+        "triggerEvents": [
+          "open_door"
+        ],
+        "delay": 1,
+        "showMessage": "The door opens in one second...",
+        "link": ""
+      },
+      {
+        "name": "Check coin",
+        "startEvent": "door_opened",
+        "actionIndex": 2,
+        "actionType": "Check Condition",
+        "trueEvent": "reward_show",
+        "falseEvent": "need_coin",
+        "conditions": [
+          {
+            "targetVariable": {
+              "name": "coins"
+            },
+            "logicOperator": ">=",
+            "variableValueMode": "Value",
+            "variableValue": "1"
+          }
+        ]
+      },
+      {
+        "name": "Need coin",
+        "startEvent": "need_coin",
+        "actionIndex": 0,
+        "actionType": "Trigger Events",
+        "triggerEvents": [],
+        "showMessage": "You need the coin first! Collect it and press the button again.",
+        "link": ""
+      },
+      {
+        "name": "Score",
+        "startEvent": "coin_collected",
+        "actionIndex": 1,
+        "actionType": "Change Variable",
+        "targetVariable": {
+          "name": "score",
+          "dataType": "number"
+        },
+        "values": [
+          {
+            "type": "Value",
+            "value": "10"
+          }
+        ],
+        "arthematicOperators": [
+          "+"
+        ]
+      }
+    ],
+    "customHUDUI": {
+      "elements": [
+        {
+          "id": "coins",
+          "type": "text-box",
+          "valueType": "variable",
+          "variableName": "coins",
+          "prefix": "Coins: ",
+          "text": "Coins: 0",
+          "style": {
+            "left": "20px",
+            "top": "20px",
+            "fontSize": "20px",
+            "backgroundColor": "rgba(0,0,0,0.55)",
+            "color": "#ffffff"
+          }
+        },
+        {
+          "id": "score",
+          "type": "text-box",
+          "valueType": "variable",
+          "variableName": "score",
+          "prefix": "Score: ",
+          "text": "Score: 0",
+          "style": {
+            "left": "20px",
+            "top": "56px",
+            "fontSize": "20px",
+            "backgroundColor": "rgba(0,0,0,0.55)",
+            "color": "#ffd34d"
+          }
+        }
+      ]
+    },
+    "customUIOverRelays": [
+      {
+        "event": "reward_show",
+        "hideEventName": "",
+        "closeOnClick": true,
+        "containerStyle": {
+          "backgroundColor": "rgba(0,0,0,0.4)"
+        },
+        "elements": [
+          {
+            "id": "title",
+            "type": "text-box",
+            "text": "You found the reward!",
+            "style": {
+              "left": "50%",
+              "top": "40%",
+              "transform": "translate(-50%, -50%)",
+              "fontSize": "32px",
+              "backgroundColor": "rgba(20,40,80,0.85)",
+              "color": "#ffffff"
+            }
+          },
+          {
+            "id": "ok",
+            "type": "button",
+            "text": "Continue",
+            "closesOverlay": true,
+            "style": {
+              "left": "50%",
+              "top": "55%",
+              "transform": "translate(-50%, -50%)"
+            }
+          }
+        ]
+      }
+    ],
+    "nodes": [
+      {
+        "id": "scene-1",
+        "type": "scene",
+        "name": "Courtyard",
+        "isBaseScene": true,
+        "children": [],
+        "settings": {
+          "worldSettings": {}
+        }
+      }
+    ],
+    "baseSceneId": "scene-1"
+  },
+  "worldItems": [
+    {
+      "_id": "wall-left",
+      "name": "Wall left",
+      "type": "primitive",
+      "sceneId": "scene-1",
+      "primitiveSettings": {
+        "shape": "box",
+        "dimensions": {
+          "width": 4,
+          "height": 3,
+          "depth": 0.4
+        },
+        "color": "#8a8f99",
+        "roughness": 0.6,
+        "metalness": 0.05,
+        "collision": "object"
+      },
+      "transformation": [
+        1.0,
+        0,
+        -0.0,
+        0,
+        0,
+        1.0,
+        0,
+        0,
+        0.0,
+        0,
+        1.0,
+        0,
+        -3,
+        1.5,
+        -4,
+        1
+      ],
+      "collision": "object"
+    },
+    {
+      "_id": "wall-right",
+      "name": "Wall right",
+      "type": "primitive",
+      "sceneId": "scene-1",
+      "primitiveSettings": {
+        "shape": "box",
+        "dimensions": {
+          "width": 4,
+          "height": 3,
+          "depth": 0.4
+        },
+        "color": "#8a8f99",
+        "roughness": 0.6,
+        "metalness": 0.05,
+        "collision": "object"
+      },
+      "transformation": [
+        1.0,
+        0,
+        -0.0,
+        0,
+        0,
+        1.0,
+        0,
+        0,
+        0.0,
+        0,
+        1.0,
+        0,
+        3,
+        1.5,
+        -4,
+        1
+      ],
+      "collision": "object"
+    },
+    {
+      "_id": "door",
+      "name": "Door",
+      "type": "primitive",
+      "sceneId": "scene-1",
+      "primitiveSettings": {
+        "shape": "box",
+        "dimensions": {
+          "width": 2,
+          "height": 3,
+          "depth": 0.3
+        },
+        "color": "#6b4a2f",
+        "roughness": 0.6,
+        "metalness": 0.05,
+        "collision": "object"
+      },
+      "transformation": [
+        1.0,
+        0,
+        -0.0,
+        0,
+        0,
+        1.0,
+        0,
+        0,
+        0.0,
+        0,
+        1.0,
+        0,
+        0,
+        1.5,
+        -4,
+        1
+      ],
+      "collision": "object",
+      "states": [
+        {
+          "transformation": [
+            1.0,
+            0,
+            -0.0,
+            0,
+            0,
+            1.0,
+            0,
+            0,
+            0.0,
+            0,
+            1.0,
+            0,
+            0,
+            4.6,
+            -4,
+            1
+          ]
+        }
+      ],
+      "transitions": [
+        {
+          "name": "Open",
+          "playmode": "event",
+          "event": "open_door",
+          "loop": false,
+          "reset": false,
+          "transitionFinishedEvent": "door_opened",
+          "transitionStopEvent": "",
+          "steps": [
+            {
+              "stateIndex": 0,
+              "duration": 1,
+              "movement": "Smooth"
+            },
+            {
+              "stateIndex": 1,
+              "duration": 1,
+              "movement": "Smooth"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "_id": "button",
+      "name": "Red button",
+      "type": "primitive",
+      "sceneId": "scene-1",
+      "primitiveSettings": {
+        "shape": "cylinder",
+        "dimensions": {
+          "radius": 0.35,
+          "height": 1.0
+        },
+        "color": "#d23b2f",
+        "roughness": 0.6,
+        "metalness": 0.05,
+        "collision": "object"
+      },
+      "transformation": [
+        1.0,
+        0,
+        -0.0,
+        0,
+        0,
+        1.0,
+        0,
+        0,
+        0.0,
+        0,
+        1.0,
+        0,
+        3,
+        0.5,
+        2,
+        1
+      ],
+      "collision": "object",
+      "enableInteraction": true,
+      "interactionName": "press the button",
+      "interactionTriggers": [
+        "button_pressed"
+      ],
+      "interactionTime": 2
+    },
+    {
+      "_id": "coin",
+      "name": "Gold coin",
+      "type": "primitive",
+      "sceneId": "scene-1",
+      "primitiveSettings": {
+        "shape": "cylinder",
+        "dimensions": {
+          "radius": 0.4,
+          "height": 0.08
+        },
+        "color": "#f2c230",
+        "roughness": 0.6,
+        "metalness": 0.05,
+        "collision": "object"
+      },
+      "transformation": [
+        1.0,
+        0,
+        -0.0,
+        0,
+        0,
+        1.0,
+        0,
+        0,
+        0.0,
+        0,
+        1.0,
+        0,
+        -3,
+        1.0,
+        3,
+        1
+      ],
+      "collision": "object",
+      "collectable": true,
+      "collectSettings": {
+        "autoPickup": true
+      },
+      "collectCountVariable": {
+        "name": "coins",
+        "dataType": "number"
+      },
+      "onCollectEvent": "coin_collected",
+      "allowAnimations": true,
+      "animations": [
+        {
+          "playmode": "auto",
+          "animationSource": "default",
+          "proceduralSettings": {
+            "type": "spin",
+            "axis": "y",
+            "speed": 0.5,
+            "intensity": 1
+          }
+        }
+      ]
+    },
+    {
+      "_id": "reward",
+      "name": "Reward",
+      "type": "primitive",
+      "sceneId": "scene-1",
+      "primitiveSettings": {
+        "shape": "sphere",
+        "dimensions": {
+          "radius": 0.6
+        },
+        "color": "#38c172",
+        "roughness": 0.6,
+        "metalness": 0.05,
+        "collision": "object"
+      },
+      "transformation": [
+        1.0,
+        0,
+        -0.0,
+        0,
+        0,
+        1.0,
+        0,
+        0,
+        0.0,
+        0,
+        1.0,
+        0,
+        0,
+        1.0,
+        -7,
+        1
+      ],
+      "collision": "object",
+      "spawnType": "event",
+      "spawnEvent": "reward_show"
+    },
+    {
+      "_id": "platform",
+      "name": "Moving platform",
+      "type": "primitive",
+      "sceneId": "scene-1",
+      "primitiveSettings": {
+        "shape": "box",
+        "dimensions": {
+          "width": 2,
+          "height": 0.3,
+          "depth": 2
+        },
+        "color": "#4a7bd0",
+        "roughness": 0.6,
+        "metalness": 0.05,
+        "collision": "object"
+      },
+      "transformation": [
+        1.0,
+        0,
+        -0.0,
+        0,
+        0,
+        1.0,
+        0,
+        0,
+        0.0,
+        0,
+        1.0,
+        0,
+        6,
+        0.15,
+        -2,
+        1
+      ],
+      "collision": "object",
+      "states": [
+        {
+          "transformation": [
+            1.0,
+            0,
+            -0.0,
+            0,
+            0,
+            1.0,
+            0,
+            0,
+            0.0,
+            0,
+            1.0,
+            0,
+            6,
+            0.15,
+            4,
+            1
+          ]
+        }
+      ],
+      "transitions": [
+        {
+          "name": "Ping-pong",
+          "playmode": "auto",
+          "event": "",
+          "loop": true,
+          "reset": true,
+          "steps": [
+            {
+              "stateIndex": 0,
+              "duration": 3,
+              "movement": "Smooth"
+            },
+            {
+              "stateIndex": 1,
+              "duration": 3,
+              "movement": "Smooth"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "_id": "spinner",
+      "name": "Spinning cube",
+      "type": "primitive",
+      "sceneId": "scene-1",
+      "primitiveSettings": {
+        "shape": "box",
+        "dimensions": {
+          "width": 0.8,
+          "height": 0.8,
+          "depth": 0.8
+        },
+        "color": "#b05bd6",
+        "roughness": 0.6,
+        "metalness": 0.05,
+        "collision": "object"
+      },
+      "transformation": [
+        1.0,
+        0,
+        -0.0,
+        0,
+        0,
+        1.0,
+        0,
+        0,
+        0.0,
+        0,
+        1.0,
+        0,
+        -6,
+        1.2,
+        -2,
+        1
+      ],
+      "collision": "object",
+      "allowAnimations": true,
+      "animations": [
+        {
+          "playmode": "auto",
+          "animationSource": "default",
+          "proceduralSettings": {
+            "type": "spin",
+            "axis": "y",
+            "speed": 0.2,
+            "intensity": 1
+          }
+        }
+      ]
+    }
+  ]
+}

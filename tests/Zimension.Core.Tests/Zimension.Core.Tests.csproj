@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Runs the engine-free event core (Packages/com.zimension.runtime/Runtime/Core) outside Unity.
+    The sources are compiled directly so the test exercises exactly what Unity compiles.
+    Usage: dotnet run (project) tests/Zimension.Core.Tests
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Runtime/Core/**/*.cs" />
+  </ItemGroup>
+</Project>

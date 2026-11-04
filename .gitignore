@@ -1,0 +1,20 @@
+# .NET test/compile-check outputs
+bin/
+obj/
+*.user
+# Unity generated folders (template project and any generated game projects)
+unity/**/Library/
+unity/**/Temp/
+unity/**/Obj/
+unity/**/Logs/
+unity/**/UserSettings/
+unity/**/Build/
+unity/**/Builds/
+unity/**/*.csproj
+unity/**/*.sln
+unity/**/.vs/
+unity/**/.idea/
+# Local tool caches
+.unity-refs/
+node_modules/
+out/

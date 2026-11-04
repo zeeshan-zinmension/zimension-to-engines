@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Compile-checks the Editor assembly (with the runtime sources) outside Unity against UnityEditor
+    and UnityEngine reference assemblies. Not used by Unity. See tools/compile-check/README.md.
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <NoWarn>CS0618;CS0649;CS0169;CS0414</NoWarn>
+    <AssemblyName>Zimension.Editor.Check</AssemblyName>
+    <UnityRefs Condition="'$(UnityRefs)' == ''">/tmp/claude-0/refs/m/lib/netstandard2.0</UnityRefs>
+    <UnityEditorRefs Condition="'$(UnityEditorRefs)' == ''">/tmp/claude-0/refs/editor</UnityEditorRefs>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Runtime/**/*.cs" />
+    <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Editor/**/*.cs" />
+    <Reference Include="$(UnityRefs)/*.dll" Private="false" />
+    <Reference Include="$(UnityEditorRefs)/*.dll" Private="false" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,32 @@
+{
+    "name": "Zimension.Editor",
+    "rootNamespace": "Zimension.Editor",
+    "references": [
+        "Zimension.Core",
+        "Zimension.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.RenderPipelines.Core.Runtime"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [
+        {
+            "name": "com.unity.render-pipelines.universal",
+            "expression": "14.0.0",
+            "define": "ZIMENSION_URP"
+        },
+        {
+            "name": "com.unity.cloud.gltfast",
+            "expression": "6.0.0",
+            "define": "ZIMENSION_GLTFAST"
+        }
+    ],
+    "noEngineReferences": false
+}

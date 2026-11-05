@@ -20,4 +20,13 @@
     <ProjectReference Include="Core.csproj" />
     <Reference Include="$(UnityRefs)/*.dll" Private="false" />
   </ItemGroup>
+  <!-- Leave out the engine modules package.json does not declare, as Unity does (see modules.py). -->
+  <Target Name="ExcludeUndeclaredModules" BeforeTargets="ResolveAssemblyReferences">
+    <Exec Command="python3 &quot;$(MSBuildThisFileDirectory)modules.py&quot; &quot;$(UnityRefs)&quot;" ConsoleToMSBuild="true" StandardOutputImportance="low">
+      <Output TaskParameter="ConsoleOutput" ItemName="UndeclaredModule" />
+    </Exec>
+    <ItemGroup>
+      <Reference Remove="@(UndeclaredModule)" />
+    </ItemGroup>
+  </Target>
 </Project>

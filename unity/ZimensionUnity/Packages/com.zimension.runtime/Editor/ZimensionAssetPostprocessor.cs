@@ -71,6 +71,18 @@ namespace Zimension.Editor
         void OnPreprocessTexture()
         {
             if (!Ours(assetPath) || !assetImporter.importSettingsMissing) return;
+            var lower = assetPath.ToLowerInvariant();
+            if (lower.EndsWith(".exr") || lower.EndsWith(".hdr"))
+            {
+                // Environment panoramas: keep their detail, wrap horizontally for the skybox seam.
+                var hdr = (TextureImporter)assetImporter;
+                hdr.maxTextureSize = 8192;
+                hdr.wrapModeU = TextureWrapMode.Repeat;
+                hdr.wrapModeV = TextureWrapMode.Clamp;
+                hdr.npotScale = TextureImporterNPOTScale.None;
+                hdr.textureCompression = TextureImporterCompression.CompressedHQ;
+                return;
+            }
             if (!assetPath.Replace('\\', '/').Contains("/UI/")) return;
             var texture = (TextureImporter)assetImporter;
             texture.textureType = TextureImporterType.Default;

@@ -27,6 +27,13 @@ def meta(rel, is_dir):
                 "  fontNames: []\n  fallbackFontReferences: []\n  customCharacters: \n  fontRenderingMode: 0\n"
                 "  ascentCalculationMode: 1\n  useLegacyBoundsCalculation: 0\n  shouldRoundAdvanceValue: 1\n"
                 "  userData: \n  assetBundleName: \n  assetBundleVariant: \n")
+    if ext in (".wav", ".mp3", ".ogg", ".aif", ".aiff"):
+        # Unity fills the remaining audio import settings with their defaults.
+        return (f"fileFormatVersion: 2\nguid: {g}\nAudioImporter:\n  externalObjects: {{}}\n  serializedVersion: 7\n"
+                "  defaultSettings:\n    serializedVersion: 2\n    loadType: 0\n    sampleRateSetting: 0\n    sampleRateOverride: 44100\n"
+                "    compressionFormat: 1\n    quality: 1\n    conversionMode: 0\n    preloadAudioData: 1\n"
+                "  platformSettingOverrides: {}\n  forceToMono: 0\n  normalize: 1\n  loadInBackground: 0\n  ambisonic: 0\n  3D: 1\n"
+                "  userData: \n  assetBundleName: \n  assetBundleVariant: \n")
     if ext == ".asmdef":
         return f"fileFormatVersion: 2\nguid: {g}\nAssemblyDefinitionImporter:\n{TAIL}"
     if os.path.basename(rel) == "package.json":

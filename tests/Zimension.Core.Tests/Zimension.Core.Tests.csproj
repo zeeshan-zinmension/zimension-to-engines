@@ -19,6 +19,7 @@
     <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Editor/AssetResolver.cs" />
     <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Editor/GltfInfo.cs" />
     <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Editor/Conversion/LogicGenerator.cs" />
+    <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Editor/InstanceGroups.cs" />
     <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Editor/ExportDownloader.cs" />
   </ItemGroup>
 </Project>

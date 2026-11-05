@@ -76,6 +76,8 @@ namespace Zimension.Editor
             public bool ShowProgress;
             public bool NativeConversion = true;
             public Conversion.LogicWiring.Generated Logic;
+            /// <summary>Bundle entry of the environment (sky) image, or null.</summary>
+            public string EnvironmentEntry;
 
             public string AssetFor(string entry) => entry != null && Staged.TryGetValue(entry, out var path) ? path : null;
         }
@@ -117,6 +119,7 @@ namespace Zimension.Editor
                     ctx.Project.compatibilitySummary = ctx.Report.Summary();
                     EditorUtility.SetDirty(ctx.Project);
                     WriteReport(ctx);
+                    WriteGuide(ctx);
                     AssetDatabase.SaveAssets();
                     AssetDatabase.Refresh();
                     if (options.UpdateBuildSettings) UpdateBuildSettings(result.ScenePaths);
@@ -146,6 +149,7 @@ namespace Zimension.Editor
             finally
             {
                 if (ctx.ShowProgress) EditorUtility.ClearProgressBar();
+                HumanoidRetarget.Cleanup();
             }
             return result;
         }
@@ -368,7 +372,10 @@ namespace Zimension.Editor
             foreach (var e in world.Obj("customHUDUI")["elements"].Items) if (e.Str("type") == "image") StageImage(ctx, e.Str("src"), "ui-image");
             foreach (var o in world["customUIOverRelays"].Items)
                 foreach (var e in o["elements"].Items) if (e.Str("type") == "image") StageImage(ctx, e.Str("src"), "ui-image");
-            if (!string.IsNullOrEmpty(world.Str("env"))) StageImage(ctx, world.Str("env"), "environment");
+            // The sky (environmentMap / env / catalog, or an unnamed HDR in older exports) and the ground's textures.
+            ctx.EnvironmentEntry = GroundBuilder.EnvironmentEntry(ctx);
+            if (ctx.EnvironmentEntry != null) Stage(ctx, ctx.EnvironmentEntry, "Textures", "environment", null, null);
+            foreach (var url in GroundBuilder.TextureUrls(world)) StageImage(ctx, url, "texture");
             // Animation libraries: other glTF files the export packaged (character rigs and clip libraries).
             Progress(ctx, "Collecting animation libraries", 0.38f);
             foreach (var name in ctx.Bundle.Names.ToList())
@@ -705,6 +712,46 @@ namespace Zimension.Editor
             manifest.Set("baseScene", new JsonNode(ctx.Project.baseSceneId ?? ""));
             manifest.Set("sourceUpdatedAt", new JsonNode(ctx.World.Str("updatedAt")));
             File.WriteAllText(Path.GetFullPath($"{ctx.GeneratedFolder}/manifest.json"), manifest.Dump(pretty: true));
+        }
+
+        /// <summary>
+        /// Assets/Zimension/README.md (how to edit converted worlds in Unity) and, per world, a summary
+        /// of what was converted and the logic script's event methods.
+        /// </summary>
+        static void WriteGuide(Context ctx)
+        {
+            try
+            {
+                var info = UnityEditor.PackageManager.PackageInfo.FindForAssembly(typeof(ZimensionImporter).Assembly);
+                var guide = Path.Combine(info != null ? info.resolvedPath : Path.GetFullPath("Packages/com.zimension.runtime"), "Editor/Data/ProjectGuide.md");
+                if (File.Exists(guide)) File.WriteAllText(Path.GetFullPath($"{Root}/README.md"), File.ReadAllText(guide));
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine($"# {ctx.Report.WorldName}");
+                sb.AppendLine();
+                sb.AppendLine($"Imported with Zimension for Unity {Version}. See `Assets/Zimension/README.md` for how to edit everything.");
+                sb.AppendLine();
+                sb.AppendLine("| | |");
+                sb.AppendLine("|---|---|");
+                sb.AppendLine($"| Scenes | {string.Join(", ", ctx.Report.Scenes.Select(Path.GetFileNameWithoutExtension))} |");
+                sb.AppendLine($"| Items placed | {ctx.Report.ItemsPlaced} |");
+                if (ctx.Logic != null) sb.AppendLine($"| Logic script | `{Conversion.LogicWiring.ScriptsRoot}/{ctx.WorldKey}/{ctx.Logic.ClassName}.Generated.cs` (your code: `{ctx.Logic.ClassName}.cs`) |");
+                if (ctx.Logic != null)
+                {
+                    sb.AppendLine();
+                    sb.AppendLine("## Event methods");
+                    sb.AppendLine();
+                    foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(ctx.Logic.Output.Code, "Zimension event \\\"([^\\\"]*)\\\"\\.</summary>\\s*public void (\\w+)\\(\\)"))
+                        sb.AppendLine($"- `{m.Groups[1].Value}` → `{m.Groups[2].Value}()`");
+                }
+                sb.AppendLine();
+                sb.AppendLine("## Import report");
+                sb.AppendLine();
+                foreach (var line in ctx.Report.Summary().Split('\n')) sb.AppendLine(line);
+                var folder = ctx.Logic != null ? $"{Conversion.LogicWiring.ScriptsRoot}/{ctx.WorldKey}" : ctx.GeneratedFolder;
+                Directory.CreateDirectory(Path.GetFullPath(folder));
+                File.WriteAllText(Path.GetFullPath($"{folder}/WORLD.md"), sb.ToString());
+            }
+            catch (Exception e) { Debug.LogWarning("[Zimension] Could not write the project guide: " + e.Message); }
         }
 
         static void UpdateBuildSettings(List<string> scenePaths)

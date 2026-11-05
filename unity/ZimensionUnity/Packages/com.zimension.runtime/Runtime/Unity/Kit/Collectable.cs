@@ -17,6 +17,7 @@ namespace Zimension.Kit
         [Tooltip("Collected into the player's inventory instead of just counted.")]
         public bool inventory;
         public AudioClip collectSound;
+        [Range(0, 1)] public float collectVolume = 0.2f;
         public UnityEvent onCollected = new UnityEvent();
 
         public override string Prompt => autoPickup ? "" : displayName;
@@ -35,7 +36,12 @@ namespace Zimension.Kit
         public void Collect()
         {
             if (!gameObject.activeInHierarchy) return;
-            if (collectSound) AudioSource.PlayClipAtPoint(collectSound, transform.position);
+            // Zimension's avatar collect sound (inventory items use the player's inventory sound).
+            if (collectSound && !inventory)
+            {
+                if (PlayerController.Current) PlayerController.Current.PlaySound(collectSound, collectVolume);
+                else AudioSource.PlayClipAtPoint(collectSound, transform.position, collectVolume);
+            }
             foreach (var s in GetComponentsInChildren<AudioSource>()) s.Stop();
             if (inventory && PlayerController.Current) PlayerController.Current.AddToInventory(displayName);
             gameObject.SetActive(false);

@@ -1,0 +1,287 @@
+[
+  {
+    "key": "WhiteDiffused",
+    "name": "White diffused",
+    "properties": {
+      "color": 16777215,
+      "roughness": 0.9
+    },
+    "textures": {}
+  },
+  {
+    "key": "RockyForest",
+    "name": "Rocky Forest",
+    "properties": {
+      "color": 16777215
+    },
+    "textureRepeat": 45,
+    "textures": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732592420967_Thumbnaildoc-1732592420904.png",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732592915693_Thumbnaildoc-1732592915611.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732593024407_Thumbnaildoc-1732593024391.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732593096377_Thumbnaildoc-1732593096344.png"
+    },
+    "textures_1": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732592499400_Thumbnaildoc-1732592499380.png",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732592939445_Thumbnaildoc-1732592939423.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732593041035_Thumbnaildoc-1732593041031.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732593114427_Thumbnaildoc-1732593114416.png"
+    },
+    "textures_2": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732592794751_Thumbnaildoc-1732592794741.png",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732592961210_Thumbnaildoc-1732592961201.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732593064378_Thumbnaildoc-1732593064338.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732593130079_Thumbnaildoc-1732593130077.png"
+    },
+    "textures_3": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732592826110_Thumbnaildoc-1732592826108.png",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732592990954_Thumbnaildoc-1732592990953.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732593079467_Thumbnaildoc-1732593079466.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732593149098_Thumbnaildoc-1732593149097.png"
+    }
+  },
+  {
+    "key": "Water",
+    "name": "Water",
+    "properties": {
+      "color": 16777215,
+      "roughness": 0.7
+    },
+    "textureRepeat": 10,
+    "textures": {
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732594031303_Thumbnaildoc-1732594031301.jpg"
+    },
+    "textures_1": {
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732594038281_Thumbnaildoc-1732594038275.jpg"
+    },
+    "textures_2": {
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732594042310_Thumbnaildoc-1732594042309.jpg"
+    },
+    "textures_3": {
+      "nor": " https://drxkpji2afm3z.cloudfront.net/folder/1732594046345_Thumbnaildoc-1732594046344.jpg"
+    },
+    "animatedWater": true
+  },
+  {
+    "key": "HexConcrete",
+    "name": "Hexagonal concrete",
+    "properties": {
+      "color": 16777215
+    },
+    "textureRepeat": 100,
+    "textures": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732596635684_Thumbnaildoc-1732596635555.png",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732596722762_Thumbnaildoc-1732596722530.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732596767104_Thumbnaildoc-1732596767070.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732596817045_Thumbnaildoc-1732596817026.png"
+    },
+    "textures_1": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732596640430_Thumbnaildoc-1732596640421.png",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732596722762_Thumbnaildoc-1732596722530.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732596767104_Thumbnaildoc-1732596767070.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732596820239_Thumbnaildoc-1732596820236.png"
+    },
+    "textures_2": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732596640430_Thumbnaildoc-1732596640421.png",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732596722762_Thumbnaildoc-1732596722530.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732596767104_Thumbnaildoc-1732596767070.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732596824083_Thumbnaildoc-1732596824082.png"
+    },
+    "textures_3": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732596648506_Thumbnaildoc-1732596648465.png",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732596722762_Thumbnaildoc-1732596722530.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732596767104_Thumbnaildoc-1732596767070.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732596827738_Thumbnaildoc-1732596827737.png"
+    }
+  },
+  {
+    "key": "Grass",
+    "name": "Grass",
+    "properties": {
+      "color": 16777215
+    },
+    "textureRepeat": 100,
+    "textures": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732593652894_Thumbnaildoc-1732593652828.png",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732593752862_Thumbnaildoc-1732593752741.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732593893536_Thumbnaildoc-1732593893516.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732593824776_Thumbnaildoc-1732593824768.png"
+    },
+    "textures_1": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732593666727_Thumbnaildoc-1732593666706.png",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732593764979_Thumbnaildoc-1732593764956.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732593926137_Thumbnaildoc-1732593926132.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732593839942_Thumbnaildoc-1732593839937.png"
+    },
+    "textures_2": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732593688226_Thumbnaildoc-1732593688223.png",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732593781721_Thumbnaildoc-1732593781718.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732593930370_Thumbnaildoc-1732593930326.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732593856548_Thumbnaildoc-1732593856546.png"
+    },
+    "textures_3": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732593688226_Thumbnaildoc-1732593688223.png",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732593797335_Thumbnaildoc-1732593797329.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732593936327_Thumbnaildoc-1732593936326.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732593872588_Thumbnaildoc-1732593872587.png"
+    }
+  },
+  {
+    "key": "snow",
+    "name": "Snow",
+    "properties": {
+      "color": 16777215,
+      "roughness": 0.7
+    },
+    "textureRepeat": 30,
+    "textures": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732596881693_Thumbnaildoc-1732596881675.jpg",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732596921803_Thumbnaildoc-1732596921719.jpg",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732596896099_Thumbnaildoc-1732596896096.jpg",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732596945638_Thumbnaildoc-1732596945635.jpg"
+    },
+    "textures_1": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732596885524_Thumbnaildoc-1732596885522.jpg",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732596933612_Thumbnaildoc-1732596933596.jpg",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732596899969_Thumbnaildoc-1732596899968.jpg",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732596949116_Thumbnaildoc-1732596949110.jpg"
+    },
+    "textures_2": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732596888963_Thumbnaildoc-1732596888962.jpg",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732596937422_Thumbnaildoc-1732596937377.jpg",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732596904327_Thumbnaildoc-1732596904326.jpg",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732596954206_Thumbnaildoc-1732596954205.jpg"
+    },
+    "textures_3": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732596892456_Thumbnaildoc-1732596892455.jpg",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732596941434_Thumbnaildoc-1732596941433.jpg",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732596909398_Thumbnaildoc-1732596909398.jpg",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732596958928_Thumbnaildoc-1732596958927.jpg"
+    }
+  },
+  {
+    "key": "sand",
+    "name": "Sand",
+    "properties": {
+      "color": 16777215,
+      "roughness": 0.7
+    },
+    "textureRepeat": 10,
+    "textures": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/sand_ground_0024_color_1k.jpg",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/sand_ground_0024_normal_opengl_1k.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/sand_ground_0024_height_1k.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/sand_ground_0024_roughness_1k.jpg"
+    }
+  },
+  {
+    "key": "concrete",
+    "name": "Concrete",
+    "properties": {
+      "color": 16777215,
+      "roughness": 0.7
+    },
+    "textureRepeat": 10,
+    "textures": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/concrete_0019_color_1k.jpg",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/concrete_0019_normal_directx_1k.png",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/concrete_0019_height_1k.png",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/concrete_0019_roughness_1k.jpg"
+    }
+  },
+  {
+    "key": "LaminatedFloor",
+    "name": "Laminated wooden floor",
+    "properties": {
+      "color": 16777215
+    },
+    "textureRepeat": 10,
+    "textures": {
+      "diff": "https://drxkpji2afm3z.cloudfront.net/folder/1732597236950_Thumbnaildoc-1732597236929.jpg",
+      "nor": "https://drxkpji2afm3z.cloudfront.net/folder/1732597246289_Thumbnaildoc-1732597246272.jpg",
+      "disp": "https://drxkpji2afm3z.cloudfront.net/folder/1732597241543_Thumbnaildoc-1732597241540.jpg",
+      "rough": "https://drxkpji2afm3z.cloudfront.net/folder/1732597250868_Thumbnaildoc-1732597250865.jpg"
+    }
+  },
+  {
+    "key": "StylizedRocky",
+    "name": "Stylized Rocky",
+    "properties": {
+      "color": 16777215,
+      "roughness": 0.85
+    },
+    "textureRepeat": 32,
+    "textures": {}
+  },
+  {
+    "key": "LowpolyRocky",
+    "name": "Lowpoly Rocky",
+    "properties": {
+      "color": 16777215,
+      "roughness": 0.85
+    },
+    "textureRepeat": 64,
+    "textures": {}
+  },
+  {
+    "key": "Ground054",
+    "name": "Sand",
+    "properties": {
+      "color": 16777215
+    },
+    "textureRepeat": 30,
+    "textures": {},
+    "textures_1": {},
+    "textures_2": {},
+    "textures_3": {}
+  },
+  {
+    "key": "GreyTiles",
+    "name": "Grey Tiles",
+    "properties": {
+      "color": 16777215,
+      "roughness": 1,
+      "metalness": 0
+    },
+    "textureRepeat": 34,
+    "textures": {},
+    "textures_3": {}
+  },
+  {
+    "key": "StylizedCobble",
+    "name": "Stylized Cobble",
+    "properties": {
+      "color": 16777215,
+      "roughness": 1,
+      "metalness": 0
+    },
+    "textureRepeat": 74,
+    "textures": {},
+    "textures_3": {}
+  },
+  {
+    "key": "StylizedLava",
+    "name": "Stylized Lava",
+    "properties": {
+      "color": 16777215,
+      "roughness": 1,
+      "metalness": 0
+    },
+    "textureRepeat": 37,
+    "textures": {},
+    "textures_3": {},
+    "emissiveFromDiffuse": true
+  },
+  {
+    "key": "StylizedBlocks",
+    "name": "Stylized Stone Blocks",
+    "properties": {
+      "color": 16777215,
+      "roughness": 1,
+      "metalness": 0
+    },
+    "textureRepeat": 37,
+    "textures": {},
+    "textures_3": {}
+  }
+]

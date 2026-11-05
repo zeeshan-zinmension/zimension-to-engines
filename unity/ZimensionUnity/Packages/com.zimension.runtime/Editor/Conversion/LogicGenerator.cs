@@ -563,6 +563,22 @@ namespace Zimension.Editor.Conversion
                 Add(g, damage.Str("increaseHealthEvent"), i, $"if ({health}) {health}.Heal({Float(damage.Float("increaseHealthAmount", 10))});");
             }
 
+            // Character behaviours: their activate / deactivate events switch them.
+            var behaviour = j.Obj("characterBehavior");
+            if (behaviour.Truthy("enable") && behaviour["behaviors"].Count > 0)
+            {
+                var field = g.Names.Take(f + "Behaviour");
+                Field("CharacterBehaviour", field, "Behaviour");
+                int k = 0;
+                foreach (var b in behaviour["behaviors"].Items)
+                {
+                    if (!b.IsObject) continue;
+                    Add(g, b.Str("activateEvent"), i, $"if ({field}) {field}.Activate({k});");
+                    Add(g, b.Str("deactivateEvent"), i, $"if ({field}) {field}.Deactivate({k});");
+                    k++;
+                }
+            }
+
             plan.Locals = item.Variables.Count > 0;
 
             // The interaction: its trigger events, then the cards that play "on interaction".

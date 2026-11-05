@@ -58,7 +58,9 @@ namespace Zimension.Editor.Conversion
             foreach (var j in ctx.Items)
             {
                 var item = new EventItem();
-                if (EventParsing.ParseItem(item, j, owners)) world.Items.Add(item);
+                bool behaves = EventParsing.ParseItem(item, j, owners);
+                // Characters with behaviours and items with health are driven by the logic too.
+                if (behaves || j.Obj("characterBehavior").Truthy("enable") || j.Obj("damageSetting").Truthy("enable")) world.Items.Add(item);
             }
             var className = LogicGenerator.Pascal(ctx.WorldKey) + "Logic";
             var output = LogicGenerator.Generate(new LogicInput

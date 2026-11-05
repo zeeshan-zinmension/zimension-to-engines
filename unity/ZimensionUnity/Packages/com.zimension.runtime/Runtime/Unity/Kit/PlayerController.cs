@@ -23,8 +23,9 @@ namespace Zimension.Kit
         [Header("Movement")]
         public float walkSpeed = 2.8f;
         public float runSpeed = 6.8f;
-        public float jumpVelocity = 6f;
-        public float gravityScale = 2f;
+        [Tooltip("Upward speed of a jump (Zimension: 6 x sqrt(jump height)).")] public float jumpVelocity = 6f;
+        [Tooltip("1 = Earth gravity (9.81 m/s2), as Zimension.")] public float gravityScale = 1f;
+        [Tooltip("Fastest fall, m/s.")] public float terminalVelocity = 30f;
         public bool jumpEnabled = true, sprintEnabled = true, autoSprint;
 
         [Header("Camera")]
@@ -39,6 +40,16 @@ namespace Zimension.Kit
         [Tooltip("The visible character (turns toward travel). Its Animator receives Speed and Grounded.")] public Transform avatar;
         public Animator animator;
         [Tooltip("Right-hand bone; found by name on start when empty.")] public Transform rightHand;
+
+        [Header("Sounds (Zimension's default player sounds)")]
+        public AudioClip walkLoop;
+        public AudioClip runLoop;
+        public AudioClip jumpSound;
+        public AudioClip hitSound;
+        public AudioClip dieSound;
+        public AudioClip fallSound;
+        public AudioClip inventorySound;
+        [Range(0, 1)] public float footstepVolume = 0.5f;
 
         [Header("Health")]
         public float maxHealth = 100;
@@ -63,6 +74,13 @@ namespace Zimension.Kit
         readonly List<string> m_Inventory = new List<string>();
         static readonly int SpeedParam = Animator.StringToHash("Speed"), GroundedParam = Animator.StringToHash("Grounded");
         bool m_HasSpeed, m_HasGrounded;
+        AudioSource m_Steps, m_Effects;
+        AudioClip m_StepClip;
+        // Animation state (Zimension's PlayerAnimation: jump, fall, land, strafe and back walks).
+        float m_MotionSpeed, m_Ungrounded, m_Falling, m_Landing;
+        bool m_Airborne, m_Running;
+        string m_State;
+        readonly Dictionary<string, bool> m_HasState = new Dictionary<string, bool>();
 
         public Camera PlayerCamera => playerCamera;
         public bool Grounded => m_Grounded;
@@ -108,6 +126,8 @@ namespace Zimension.Kit
                 }
             }
             if (!rightHand && avatar) rightHand = FindHand(avatar);
+            m_Steps = gameObject.AddComponent<AudioSource>(); m_Steps.playOnAwake = false; m_Steps.loop = true; m_Steps.spatialBlend = 0; m_Steps.volume = footstepVolume;
+            m_Effects = gameObject.AddComponent<AudioSource>(); m_Effects.playOnAwake = false; m_Effects.spatialBlend = 0;
             m_Yaw = transform.eulerAngles.y;
             m_SpawnPosition = transform.position; m_SpawnYaw = m_Yaw;
         }
@@ -131,7 +151,7 @@ namespace Zimension.Kit
         // ---- Spawn and movement ------------------------------------------------------------------
 
         public void SetSpawn(Vector3 position, float yaw) { m_SpawnPosition = position; m_SpawnYaw = yaw; }
-        public void Respawn() { m_Dead = false; health = maxHealth; Teleport(m_SpawnPosition, m_SpawnYaw); }
+        public void Respawn() { m_Dead = false; health = maxHealth; m_State = null; Teleport(m_SpawnPosition, m_SpawnYaw); }
 
         public void Teleport(Vector3 position, float yaw)
         {
@@ -145,7 +165,7 @@ namespace Zimension.Kit
         /// <summary>Upward speed that rises the given height (launch_player_up_*).</summary>
         public void Launch(float metres)
         {
-            m_Velocity.y = Mathf.Sqrt(2 * Mathf.Abs(Physics.gravity.y) * gravityScale * Mathf.Max(0, metres));
+            m_Velocity.y = Mathf.Max(m_Velocity.y, Mathf.Sqrt(2 * 9.81f * gravityScale * Mathf.Max(0, metres)));
             m_Grounded = false;
         }
 
@@ -176,12 +196,17 @@ namespace Zimension.Kit
             var yaw = Quaternion.Euler(0, m_Yaw, 0);
             var wish = yaw * new Vector3(move.x, 0, move.y);
             if (wish.sqrMagnitude > 1) wish.Normalize();
-            var horizontal = wish * (sprint ? runSpeed : walkSpeed);
-            float gravity = Mathf.Abs(Physics.gravity.y) * gravityScale;
+            bool running = sprint && move.y > 0;
+            var target = wish * (running ? runSpeed : walkSpeed);
+            float gravity = 9.81f * gravityScale;
+            bool jumped = false;
             if (m_Grounded && m_Velocity.y <= 0) m_Velocity.y = -2f;
-            if (m_Grounded && jump) { m_Velocity.y = jumpVelocity; m_Grounded = false; }
-            m_Velocity.y -= gravity * dt;
-            m_Velocity.x = horizontal.x; m_Velocity.z = horizontal.z;
+            if (m_Grounded && jump) { m_Velocity.y = jumpVelocity; m_Grounded = false; jumped = true; }
+            m_Velocity.y = Mathf.Max(-terminalVelocity, m_Velocity.y - gravity * dt);
+            // Zimension eases toward the wanted speed (1 - e^(-18 t)) instead of snapping.
+            float blend = 1 - Mathf.Exp(-18 * dt);
+            m_Velocity.x += (target.x - m_Velocity.x) * blend; m_Velocity.z += (target.z - m_Velocity.z) * blend;
+            var horizontal = new Vector3(m_Velocity.x, 0, m_Velocity.z);
             var flags = m_Controller.Move(m_Velocity * dt);
             m_Grounded = (flags & CollisionFlags.Below) != 0;
             if ((flags & CollisionFlags.Above) != 0 && m_Velocity.y > 0) m_Velocity.y = 0;
@@ -195,10 +220,73 @@ namespace Zimension.Kit
             {
                 if (m_HasSpeed) animator.SetFloat(SpeedParam, horizontal.magnitude, 0.08f, dt);
                 if (m_HasGrounded) animator.SetBool(GroundedParam, m_Grounded);
+                Animate(dt, horizontal.magnitude, move.y, move.x, !thirdPerson || (CurrentWeapon && CurrentWeapon.type == Weapon.WeaponType.Gun));
             }
+            Sounds(jumped, move.sqrMagnitude > 0.01f, running);
             UpdateTargets();
             if (transform.position.y < -200) Respawn();
         }
+
+        bool Has(string state)
+        {
+            if (string.IsNullOrEmpty(state) || !animator) return false;
+            if (!m_HasState.TryGetValue(state, out var has)) m_HasState[state] = has = animator.HasState(0, Animator.StringToHash(state));
+            return has;
+        }
+
+        void Play(string state, float fade, float start = 0)
+        {
+            if (state == m_State || !Has(state)) return;
+            m_State = state;
+            animator.CrossFadeInFixedTime(state, fade, 0, start);
+        }
+
+        /// <summary>
+        /// Zimension's player animation choice: a jump plays Jump_forward, a fall Falling_idle then
+        /// Falling after a second, landing Falling_To_Landing for half a second; on the ground Idle,
+        /// Walk, Run, Walk_Left/Right and Walk_Backward (when not turning to face travel).
+        /// States missing from the Animator fall back to the Locomotion blend tree.
+        /// </summary>
+        void Animate(float dt, float speed, float forward, float strafe, bool strafing)
+        {
+            if (!strafing) { forward = Mathf.Sqrt(forward * forward + strafe * strafe); strafe = 0; }
+            m_MotionSpeed += (speed - m_MotionSpeed) * (1 - Mathf.Exp(-dt / 0.10f));
+            float vertical = m_Velocity.y;
+            m_Ungrounded = m_Grounded ? 0 : m_Ungrounded + dt;
+            if (!m_Grounded && (m_Airborne || vertical > 0.5f || (m_Ungrounded >= 0.06f && vertical < -0.5f)))
+            {
+                m_Airborne = true; m_Landing = 0;
+                if (vertical < -1) { m_Falling += dt; Play(m_Falling >= 1 && vertical < -8 && Has("Falling") ? "Falling" : Has("Falling_idle") ? "Falling_idle" : "Jump", 0.5f); return; }
+                if (m_Falling > 0 || vertical < -0.5f) { Play(Has("Falling_idle") ? "Falling_idle" : "Jump", 0.5f); return; }
+                Play(Has("Jump_forward") ? "Jump_forward" : "Jump", 0.3f, 0.15f);
+                return;
+            }
+            bool wasLanding = m_Landing > 0;
+            if (m_Airborne) { m_Airborne = false; m_Falling = 0; m_Landing = 0.5f; }
+            else m_Landing = Mathf.Max(0, m_Landing - dt);
+            if (m_Landing > 0 && Has("Falling_To_Landing")) { Play("Falling_To_Landing", 0.3f, 0.35f); return; }
+            float fade = wasLanding ? 0.3f : 0.5f;
+            if (speed <= 0.15f || Mathf.Sqrt(forward * forward + strafe * strafe) < 0.05f) { m_Running = false; Play(Has("Idle") ? "Idle" : "Locomotion", fade); return; }
+            if (Mathf.Abs(strafe) > Mathf.Abs(forward) && Has(strafe < 0 ? "Walk_Left" : "Walk_Right")) { m_Running = false; Play(strafe < 0 ? "Walk_Left" : "Walk_Right", fade); return; }
+            if (forward < 0 && Has("Walk_Backward")) { m_Running = false; Play("Walk_Backward", fade); return; }
+            m_Running = speed > walkSpeed * (m_Running ? 1.10f : 1.35f);
+            var state = m_Running ? "Run" : "Walk";
+            Play(Has(state) ? state : "Locomotion", fade);
+        }
+
+        /// <summary>Footstep loops (walk or run, one at a time, silent in the air) and the jump sound.</summary>
+        void Sounds(bool jumped, bool walking, bool running)
+        {
+            if (jumped && jumpSound) m_Effects.PlayOneShot(jumpSound, 0.3f);
+            var want = !m_Grounded || !walking || InputBlocked ? null : running ? runLoop : walkLoop;
+            if (want == m_StepClip) return;
+            m_StepClip = want;
+            m_Steps.Stop();
+            if (want) { m_Steps.clip = want; m_Steps.volume = footstepVolume; m_Steps.Play(); }
+        }
+
+        /// <summary>A one-shot from the player (collect, inventory, hit ...).</summary>
+        public void PlaySound(AudioClip clip, float volume = 1) { if (clip && m_Effects) m_Effects.PlayOneShot(clip, volume); }
 
         void LateUpdate()
         {
@@ -293,14 +381,20 @@ namespace Zimension.Kit
             if (m_Dead || amount <= 0) return;
             health = Mathf.Max(0, health - amount);
             onDamaged.Invoke();
-            if (health <= 0) { m_Dead = true; onDied.Invoke(); GameManager.Current?.PlayerDied(); }
+            if (health > 0) { PlaySound(hitSound, 1); return; }
+            m_Dead = true;
+            m_Steps.Stop(); m_StepClip = null;
+            PlaySound(fallSound, 1); PlaySound(dieSound, 0.2f);
+            if (Has("Dying")) Play("Dying", 0.3f);
+            onDied.Invoke();
+            GameManager.Current?.PlayerDied();
         }
 
         public void Heal(float amount) { if (!m_Dead) health = Mathf.Min(maxHealth, health + Mathf.Max(0, amount)); }
 
         // ---- Inventory and ammo ------------------------------------------------------------------
 
-        public void AddToInventory(string item) => m_Inventory.Add(item);
+        public void AddToInventory(string item) { m_Inventory.Add(item); PlaySound(inventorySound, 0.6f); }
         public int Ammo(string weaponClass) => m_Ammo.TryGetValue(weaponClass ?? "", out var n) ? n : 0;
         public void AddAmmo(string weaponClass, int rounds) => m_Ammo[weaponClass ?? ""] = Ammo(weaponClass) + Mathf.Max(0, rounds);
         public int TakeAmmo(string weaponClass, int wanted)

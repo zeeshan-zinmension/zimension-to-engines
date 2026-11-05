@@ -115,6 +115,7 @@ namespace Zimension.Editor
                 // Items placed by this scene's subtree.
                 var placed = new HashSet<string>(StringComparer.Ordinal);
                 var visited = new HashSet<string>(StringComparer.Ordinal);
+                var recipes = new List<JsonNode>();
                 void Visit(JsonNode node, int depth)
                 {
                     if (depth > 128) return;
@@ -123,8 +124,7 @@ namespace Zimension.Editor
                     if (node.Str("type") == "scene" && scene.Id.Length > 0 && id != scene.Id) return;
                     var r = Canonical(node);
                     if (r.Length > 0) placed.Add(r);
-                    if (node.Str("type") == "instanceGroup")
-                        ctx.Report.Add(ImportReport.Level.Unsupported, $"Instance group '{node.Str("name")}' (procedural/brushed copies) is not generated yet", "nodes.settings.instance");
+                    if (node.Str("type") == "instanceGroup") recipes.Add(node);
                     foreach (var c in node["children"].Items)
                     {
                         if (c.IsObject) Visit(c, depth + 1);
@@ -159,6 +159,11 @@ namespace Zimension.Editor
                 camera.AddComponent<AudioListener>();
                 cam.nearClipPlane = 0.05f; cam.farClipPlane = 5000;
                 cam.fieldOfView = Mathf.Clamp(sceneWorld.Obj("avatar").Float("fov", 60), 20, 120);
+                if ((int)sceneWorld.Num("envMapIndex", 0) == 9)
+                {
+                    cam.clearFlags = CameraClearFlags.SolidColor;
+                    cam.backgroundColor = CssStyle.ParseColor(sceneWorld.Str("envColor", "#a1c2d1"), new Color(0.63f, 0.76f, 0.82f));
+                }
                 zw.playCamera = cam;
                 BuildSpawn(sceneWorld, rootGo.transform, camera.transform);
                 int order = 0;
@@ -176,6 +181,15 @@ namespace Zimension.Editor
                     catch (Exception error)
                     {
                         ctx.Report.Add(ImportReport.Level.Blocking, "Item could not be generated: " + error.Message, "", item);
+                        Debug.LogException(error);
+                    }
+                }
+                foreach (var recipe in recipes)
+                {
+                    try { BuildInstanceGroup(ctx, recipe, rootGo.transform, aliases); }
+                    catch (Exception error)
+                    {
+                        ctx.Report.Add(ImportReport.Level.Approximated, $"Instance group '{recipe.Str("name")}' skipped: {error.Message}", "nodes.settings.instance");
                         Debug.LogException(error);
                     }
                 }
@@ -199,6 +213,82 @@ namespace Zimension.Editor
             return paths;
         }
 
+        // ---- Instance groups ----------------------------------------------------------------
+
+        /// <summary>
+        /// An instance group's copies: each is a copy of the source item's model (same materials and
+        /// customizations), placed at the recipe's matrix, under an "Instances" object named after the
+        /// group. Animated (skinned) sources are not instanced, as on the web.
+        /// </summary>
+        static void BuildInstanceGroup(ZimensionImporter.Context ctx, JsonNode node, Transform root, Dictionary<string, string> aliases)
+        {
+            var settings = node.Obj("settings").Obj("instance");
+            var name = node.Str("name", "Instances");
+            var items = root.GetComponentsInChildren<ZimensionItem>(true);
+            ZimensionItem Find(string raw)
+            {
+                var id = aliases.TryGetValue(raw, out var a) ? a : raw;
+                return items.FirstOrDefault(i => i.itemId == id) ?? items.FirstOrDefault(i => i.sourceId == raw || i.itemId == raw);
+            }
+            var sourceItems = new List<ZimensionItem>();
+            var matrices = new List<N.Matrix4x4>();
+            foreach (var raw in InstanceGroups.Sources(settings))
+            {
+                var zi = Find(raw);
+                if (!zi) continue;
+                var json = ctx.Items.FirstOrDefault(i => i.Str("_id") == zi.itemId);
+                if (json == null) continue;
+                sourceItems.Add(zi); matrices.Add(ItemPose(json));
+                if (json.Truthy("hideForInstanceGroup")) zi.gameObject.SetActive(false);
+            }
+            if (sourceItems.Count == 0) { ctx.Report.Add(ImportReport.Level.Approximated, $"Instance group '{name}' has no source item in this scene", "nodes.settings.instance"); return; }
+            SplineCurve spline = null; var splineWorld = N.Matrix4x4.Identity;
+            if (settings.Str("distributionMode") == "spline")
+            {
+                var splineItem = Find(settings.Str("splineWorldItemId"));
+                var json = splineItem ? ctx.Items.FirstOrDefault(i => i.Str("_id") == splineItem.itemId) : null;
+                if (json != null) { spline = SplineCurve.Parse(json.Obj("splineSettings")); splineWorld = ItemPose(json); }
+            }
+            var warnings = new List<string>();
+            var copies = InstanceGroups.Copies(settings, node.Obj("settings").Obj("transform"), matrices, spline, splineWorld, warnings);
+            foreach (var w in warnings.Distinct()) ctx.Report.Add(ImportReport.Level.Approximated, $"Instance group '{name}': {w}", "nodes.settings.instance");
+            bool collides = InstanceGroups.Collides(settings) && ctx.World.Str("playType") != "presentation";
+            var group = new GameObject($"Instances - {name}");
+            group.transform.SetParent(root, false);
+            group.isStatic = true;
+            int made = 0;
+            foreach (var copy in copies)
+            {
+                var source = sourceItems[copy.Source];
+                var model = source.modelRoot ? source.modelRoot.gameObject : null;
+                if (!model || model.GetComponentsInChildren<SkinnedMeshRenderer>(true).Length > 0) continue;
+                var go = new GameObject($"{source.itemName} ({made + 1})");
+                go.transform.SetParent(group.transform, false);
+                UnityMath.ApplyLocal(go.transform, Coordinates.ThreeToUnity(copy.World));
+                var prefab = PrefabUtility.GetCorrespondingObjectFromSource(model);
+                var clone = prefab ? (GameObject)PrefabUtility.InstantiatePrefab(prefab, go.transform) : UnityEngine.Object.Instantiate(model, go.transform);
+                clone.name = model.name;
+                clone.transform.localPosition = model.transform.localPosition;
+                clone.transform.localRotation = model.transform.localRotation;
+                clone.transform.localScale = model.transform.localScale;
+                // Same materials and node adjustments (customizations) as the source.
+                var from = model.GetComponentsInChildren<Transform>(true); var to = clone.GetComponentsInChildren<Transform>(true);
+                for (int k = 0; k < from.Length && k < to.Length; k++)
+                {
+                    to[k].localPosition = from[k].localPosition; to[k].localRotation = from[k].localRotation; to[k].localScale = from[k].localScale;
+                    var a = from[k].GetComponent<Renderer>(); var b = to[k].GetComponent<Renderer>();
+                    if (a && b) { b.sharedMaterials = a.sharedMaterials; b.shadowCastingMode = a.shadowCastingMode; b.receiveShadows = a.receiveShadows; b.enabled = a.enabled; }
+                    if (!collides) foreach (var col in to[k].GetComponents<Collider>()) UnityEngine.Object.DestroyImmediate(col);
+                }
+                if (collides)
+                    foreach (var f in clone.GetComponentsInChildren<MeshFilter>(true))
+                        if (f.sharedMesh && !f.GetComponent<Collider>()) f.gameObject.AddComponent<MeshCollider>().sharedMesh = f.sharedMesh;
+                foreach (var t in go.GetComponentsInChildren<Transform>(true)) t.gameObject.isStatic = true;
+                made++;
+            }
+            ctx.Report.Add(ImportReport.Level.Optional, $"Instance group '{name}': {made} copies of {string.Join(", ", sourceItems.Select(i => i.itemName).Distinct())}", "nodes.settings.instance");
+        }
+
         // ---- Environment ---------------------------------------------------------------------
 
         static Color ParseColor(string hex, Color fallback) => CssStyle.ParseColor(hex, fallback);
@@ -219,47 +309,11 @@ namespace Zimension.Editor
             light.shadows = world.Str("shadows") == "off" ? LightShadows.None : LightShadows.Soft;
             sun.transform.rotation = Quaternion.LookRotation(-sunUnity, Vector3.up);
             RenderSettings.sun = light;
-            // Environment image (world.env) as a panoramic sky; otherwise the procedural sky.
-            Material sky = null;
-            var envEntry = ctx.Resolver.Url(world.Str("env"));
-            var envTex = envEntry != null ? AssetDatabase.LoadAssetAtPath<Texture>(ctx.AssetFor(envEntry)) : null;
-            var panoramic = Shader.Find("Skybox/Panoramic");
-            if (envTex && panoramic)
-            {
-                sky = new Material(panoramic) { name = "Zimension Sky" };
-                sky.SetTexture("_MainTex", envTex);
-                AssetDatabase.CreateAsset(sky, AssetDatabase.GenerateUniqueAssetPath($"{ctx.GeneratedFolder}/Materials/Sky.mat"));
-            }
-            else
-            {
-                var procedural = Shader.Find("Skybox/Procedural");
-                if (procedural)
-                {
-                    sky = new Material(procedural) { name = "Zimension Procedural Sky" };
-                    AssetDatabase.CreateAsset(sky, AssetDatabase.GenerateUniqueAssetPath($"{ctx.GeneratedFolder}/Materials/Sky.mat"));
-                }
-                if (!string.IsNullOrEmpty(world.Str("env"))) ctx.Report.Add(ImportReport.Level.Approximated, "Environment map is not a Unity-importable image; the procedural sky is used", "env");
-            }
-            if (sky) RenderSettings.skybox = sky;
-            RenderSettings.ambientMode = AmbientMode.Skybox;
-            RenderSettings.ambientIntensity = Mathf.Clamp(world.Float("exposure", 1), 0.2f, 3);
-            // Ground: the saved floor, or an invisible floor that keeps the player from falling forever.
-            bool showGround = world.Flag("showGround", true);
-            float size = Mathf.Max(world.Float("size", 500), 50);
-            var ground = new GameObject(showGround ? "Ground" : "Floor (invisible)");
-            ground.isStatic = true;
-            if (showGround)
-            {
-                var mesh = GetMesh(ctx, new MeshFactory.Shape { Name = "plane", Width = size, Depth = size, Segments = 1 });
-                ground.AddComponent<MeshFilter>().sharedMesh = mesh;
-                var renderer = ground.AddComponent<MeshRenderer>();
-                renderer.sharedMaterial = GetMaterial(ctx, ParseColor(world.Str("groundColor", world.Str("floorColor", "#7a8a6a")), new Color(0.48f, 0.54f, 0.42f)), 0.95f, 0, 1, Color.black, null, false);
-                if (world.Has("floorMaterialIndex")) ctx.Report.Add(ImportReport.Level.Approximated, "Ground material presets are shown as a flat colour", "floorMaterialIndex");
-            }
-            var floor = ground.AddComponent<BoxCollider>();
-            float extent = Mathf.Max(10000, size * 4);
-            floor.size = new Vector3(extent, 0.2f, extent);
-            floor.center = new Vector3(0, -0.1f, 0);
+            // Sky, ambient light, fog, then the ground (a Unity Terrain).
+            var folder = $"{ctx.GeneratedFolder}/Environment";
+            if (!AssetDatabase.IsValidFolder(folder)) AssetDatabase.CreateFolder(ctx.GeneratedFolder, "Environment");
+            GroundBuilder.BuildSky(ctx, world, folder);
+            GroundBuilder.Build(ctx, world, folder);
         }
 
         static void BuildSpawn(JsonNode world, Transform root, Transform camera)

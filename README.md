@@ -3,18 +3,21 @@
 Exports Zimension projects to game engines. **Unity is implemented**; Unreal is a later target that
 will reuse the same event core and import contract.
 
-A Zimension project becomes an editable Unity 6 project: one `.unity` scene per Zimension scene,
-models as glTF prefabs, sounds as AudioClips, and the world's events, logic flows, variables,
-transitions, animations, lip sync, interactions, collectables, HUD and scene switches running
-through ordinary Unity components. After import, play uses only local assets: no Zimension API,
-no web player.
+A Zimension project becomes a plain Unity 6 project, built the way a Unity developer would build it:
+one `.unity` scene per Zimension scene, models as glTF prefabs, the ground as a Terrain, animation
+cards as Animator Controllers (Humanoid retargeting for characters), transitions as baked clips,
+sounds as AudioSources, interactions, collectables, weapons, vehicles, health and NPC behaviours as
+Kit components, instance groups as copies, and the world's events, logic flows and variables as a
+generated, readable C# script (`<World>Logic`, one method per event). Nothing interprets Zimension
+data at runtime. The exported project's [README](unity/ZimensionUnity/README.md) explains how to edit
+every part of it.
 
 ```
 Zimension editor ──Export > Unity──▶ share link (uploaded export: masterData.json + assets)
                                           │  (or a downloaded .zip)
 Zimension Unity project ──Zimension > Import from Zimension──▶ download, verify, import
                                           │
-                                Press Play ▶ ZimensionWorld runs the scene
+                                Press Play ▶ the converted scene runs (Kit components + <World>Logic.cs)
                                 Pull latest ▶ re-import after the next export
 ```
 
@@ -75,11 +78,12 @@ from the editor after saving, so the export carries the saved authoring state.
 What has been verified, and what still needs your Windows machine:
 
 * **Verified in this repository (Linux, no Unity):**
-  * 167 checks pass: the event core (including the native player's ported regression cases), the export reader, the sample world, and the link downloader against a fault-injecting HTTP server (resume, retries, stalls, version changes, checksums, cancel).
+  * 191 checks pass: the event core (including the native player's ported regression cases), the export reader, the sample world, the link downloader against a fault-injecting HTTP server (resume, retries, stalls, version changes, checksums, cancel), the C# logic generator and the instance-group layouts.
+  * The logic generated for a real world (Escape From Outpost X) compiles against the Kit.
   * 15 contract checks pass for the reference link server, and an end-to-end link import works (reference server to Unity downloader).
   * The runtime and Editor code compile with no errors or warnings against Unity reference assemblies.
 * **Not yet verified (needs Unity 6 on Windows):**
   * Opening the project, importing real exports, Play mode, and the standalone build. [docs/TESTING_ON_WINDOWS.md](docs/TESTING_ON_WINDOWS.md) lists each check.
 * **Unity CI:** the job in `.github/workflows/ci.yml` runs once a Unity licence is configured (see [docs/TESTING_ON_WINDOWS.md](docs/TESTING_ON_WINDOWS.md#ci)).
 
-See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) for which features are supported, approximated or not supported yet (vehicles, weapons, NPC behaviours, terrain and instance groups are later milestones).
+See [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md) and the exported project's README (section 20) for what is approximated or not converted yet. Importing with `Options.NativeConversion = false` keeps the earlier interpreting runtime (`ZimensionWorld`).

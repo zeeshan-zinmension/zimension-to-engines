@@ -91,6 +91,8 @@ namespace Zimension.Editor.Conversion
                 if (!e.Active || e.Hidden) hide.Add(go);
             }
 
+            ResolveBehaviourWeapons(byId);
+
             // World sounds (2D) under one object.
             var worldSounds = new GameObject("World Sounds");
             worldSounds.transform.SetParent(worldRoot.transform, false);
@@ -118,6 +120,7 @@ namespace Zimension.Editor.Conversion
             var hud = game.AddComponent<GameHud>();
             hud.worldTitle = ctx.World.Str("name");
             manager.player = player; manager.hud = hud;
+            if (worldRoot.GetComponentInChildren<CharacterBehaviour>(true)) game.AddComponent<RuntimeNavMesh>();
             result.Game = game;
 
             // The Zimension runtime is replaced by the converted components.
@@ -176,8 +179,11 @@ namespace Zimension.Editor.Conversion
 
             // Animation cards: an Animator Controller on the model, ProceduralMotion for the built-in ones.
             var states = LogicGenerator.AnimationStates(e, out var rest);
-            if (states.Any(s => s != null) && zi.modelRoot)
-                BuildModelAnimator(ctx, zi, e, states, rest, plan != null && plan.AnimationEvents);
+            var behaviour = json.Obj("characterBehavior");
+            bool npc = behaviour.Truthy("enable") && behaviour["behaviors"].Count > 0 && zi.modelRoot;
+            if ((states.Any(s => s != null) || npc) && zi.modelRoot)
+                BuildModelAnimator(ctx, zi, e, states, rest, plan != null && plan.AnimationEvents, npc ? NpcStates : null);
+            if (npc) BuildBehaviour(ctx, zi, json, behaviour, area);
             for (int c = 0; c < e.Animations.Count; c++)
                 if (states[c] == null) AddProcedural(zi, e.Animations[c]);
 
@@ -202,6 +208,7 @@ namespace Zimension.Editor.Conversion
                 var collect = go.AddComponent<Collectable>();
                 collect.autoPickup = e.AutoPickup; collect.inventory = e.Inventory; collect.displayName = e.Name;
                 collect.area = area; collect.reach = reach;
+                collect.collectSound = Sound("collect");
             }
             foreach (var trigger in e.ItemTriggers)
             {
@@ -296,45 +303,113 @@ namespace Zimension.Editor.Conversion
             return AnimatorController.CreateAnimatorControllerAtPath(path);
         }
 
-        static void BuildModelAnimator(ZimensionImporter.Context ctx, ZimensionItem zi, EventItem e, List<string> states, string rest, bool events)
+        /// <summary>The locomotion states a character with behaviours needs: state, candidate clip names, loops.</summary>
+        static readonly (string state, string[] names, bool loop)[] NpcStates =
+        {
+            ("Idle", new[] { "Idle", "stand_idle" }, true), ("Walk", new[] { "Walk", "walk_forward" }, true),
+            ("Run", new[] { "Run", "running_forward", "Walk" }, true), ("Right_Hook", new[] { "Right_Hook", "Attack", "Attack_1" }, false),
+            ("Dying", new[] { "Dying", "Death", "Die" }, false),
+        };
+
+        static bool IsCharacter(GameObject model) => model.GetComponentsInChildren<SkinnedMeshRenderer>(true).Any(r => r.bones != null && r.bones.Length >= 10);
+
+        /// <summary>The clip as authored (a glTF/FBX sub-asset): bound copies are traced back to the library clip of the same name.</summary>
+        static AnimationClip OriginalOf(ZimensionImporter.Context ctx, AnimationClip clip)
+        {
+            if (!clip) return null;
+            var path = AssetDatabase.GetAssetPath(clip).ToLowerInvariant();
+            if (path.EndsWith(".glb") || path.EndsWith(".gltf") || path.EndsWith(".fbx")) return clip;
+            return ctx.LibraryClips.FirstOrDefault(c => c && c.name == clip.name);
+        }
+
+        /// <summary>A character's clip by name: its own or card clips first, then the matching animation library.</summary>
+        static AnimationClip ClipNamed(ZimensionImporter.Context ctx, ZimensionItem zi, IEnumerable<string> names)
+        {
+            var map = zi.Json.Obj("characterAnimationMap");
+            var wanted = names.Select(n => map.Str(n, n)).Concat(names).Distinct().ToList();
+            for (int i = 0; zi.clips != null && i < zi.clips.Length; i++)
+                if (zi.clips[i] && wanted.Any(w => w == zi.clipNames[i] || w == zi.clips[i].name || ZimensionImporter.NormalizeClipName(w) == ZimensionImporter.NormalizeClipName(zi.clips[i].name))) return zi.clips[i];
+            return ZimensionImporter.FindBestClip(ctx, wanted, zi.modelRoot, new List<AnimationClip>(), null, zi.itemName);
+        }
+
+        /// <summary>
+        /// The item's Animator Controller: a state per animation card (named as the generated logic
+        /// plays them), plus locomotion states for characters with behaviours. Humanoid characters get
+        /// a Humanoid Avatar and muscle-space clips (Unity retargeting); others keep bone-bound clips.
+        /// </summary>
+        static void BuildModelAnimator(ZimensionImporter.Context ctx, ZimensionItem zi, EventItem e, List<string> states, string rest, bool events,
+            (string state, string[] names, bool loop)[] extra)
         {
             var target = zi.modelRoot.gameObject;
+            // Every state: name, clip, loop, hold, speed, reports finished.
+            var wantedStates = new List<(string name, AnimationClip clip, bool loop, bool hold, float speed, bool finished)>();
+            for (int c = 0; c < e.Animations.Count; c++)
+            {
+                if (states[c] == null) continue;
+                var card = e.Animations[c].Source;
+                int index = ResolveClip(zi, card);
+                var clip = index >= 0 ? zi.clips[index] : null;
+                if (!clip) ctx.Report.Add(ImportReport.Level.Approximated, $"Animation '{states[c]}' is not in the model or a matching library; its Animator state is empty", "animations", zi.Json);
+                else if (clip.legacy) { ctx.Report.Add(ImportReport.Level.Approximated, $"Animation '{clip.name}' is a Legacy clip", "animations", zi.Json); clip = null; }
+                float speed = card.Float("speed", 1);
+                wantedStates.Add((states[c], clip, card.Flag("loop", e.Animations[c].Playmode == "auto"), card.Truthy("clampOnFinish"), Mathf.Approximately(speed, 0) ? 1 : speed, events));
+            }
+            if (extra != null)
+                foreach (var (state, names, loop) in extra)
+                {
+                    if (wantedStates.Any(w => w.name == state)) continue;
+                    var clip = ClipNamed(ctx, zi, names);
+                    if (!clip) { ctx.Report.Add(ImportReport.Level.Approximated, $"Character has no '{state}' animation; its behaviour skips it", "characterBehavior", zi.Json); continue; }
+                    wantedStates.Add((state, clip, loop, state == "Dying", 1, false));
+                }
+            if (extra != null && rest == "Rest" && wantedStates.Any(w => w.name == "Idle" && w.clip)) rest = "Idle";
+
+            // Humanoid retargeting for characters: every clip must convert, else the bone-bound clips stay.
+            bool humanoid = false;
+            var humanoidClips = new Dictionary<string, AnimationClip>();
+            if (IsCharacter(target) && wantedStates.Any(w => w.clip))
+            {
+                var folder = HumanoidRetarget.Folder(ctx);
+                var previous = target.GetComponent<Animator>() ? target.GetComponent<Animator>().avatar : null;
+                if (HumanoidRetarget.MakeHumanoid(ctx, target, folder, zi.Json))
+                {
+                    humanoid = true;
+                    foreach (var w in wantedStates)
+                    {
+                        if (!w.clip) continue;
+                        var converted = HumanoidRetarget.Humanoid(OriginalOf(ctx, w.clip), folder);
+                        if (!converted) { humanoid = false; break; }
+                        humanoidClips[w.name] = converted;
+                    }
+                    if (!humanoid)
+                    {
+                        target.GetComponent<Animator>().avatar = previous;
+                        ctx.Report.Add(ImportReport.Level.Approximated, $"Some animations of '{zi.itemName}' come from a non-humanoid skeleton; bone-name binding is used", "animations", zi.Json);
+                    }
+                }
+            }
+
             var controller = NewController(ctx, zi.itemName + " Animations");
             var machine = controller.layers[0].stateMachine;
             var restState = machine.AddState("Rest");
             restState.writeDefaultValues = false;
             var byName = new Dictionary<string, AnimatorState>(StringComparer.Ordinal) { ["Rest"] = restState };
-            for (int c = 0; c < e.Animations.Count; c++)
+            foreach (var w in wantedStates)
             {
-                if (states[c] == null) continue;
-                var card = e.Animations[c].Source;
-                var state = machine.AddState(states[c]);
+                var state = machine.AddState(w.name);
                 state.writeDefaultValues = false;
-                byName[states[c]] = state;
-                int index = ResolveClip(zi, card);
-                bool loop = card.Flag("loop", e.Animations[c].Playmode == "auto");
-                if (index < 0)
-                {
-                    ctx.Report.Add(ImportReport.Level.Approximated, $"Animation '{states[c]}' is not in the model or a matching library; its Animator state is empty", "animations", zi.Json);
-                    continue;
-                }
-                var clip = zi.clips[index];
-                if (clip && clip.legacy) { ctx.Report.Add(ImportReport.Level.Approximated, $"Animation '{clip.name}' is a Legacy clip", "animations", zi.Json); continue; }
-                state.motion = WithLoop(ctx, clip, loop);
-                float speed = card.Float("speed", 1);
-                state.speed = Mathf.Approximately(speed, 0) ? 1 : speed;
-                if (events) { var b = state.AddStateMachineBehaviour<StateFinished>(); b.stateName = states[c]; }
+                byName[w.name] = state;
+                if (w.clip) state.motion = WithLoop(ctx, humanoid && humanoidClips.TryGetValue(w.name, out var h) ? h : w.clip, w.loop);
+                state.speed = w.speed;
+                if (w.finished) { var b = state.AddStateMachineBehaviour<StateFinished>(); b.stateName = w.name; }
             }
             var home = byName.TryGetValue(rest, out var r) ? r : restState;
             machine.defaultState = home;
             // A one-shot that does not hold its last pose returns to the resting state.
-            for (int c = 0; c < e.Animations.Count; c++)
+            foreach (var w in wantedStates)
             {
-                if (states[c] == null) continue;
-                var card = e.Animations[c].Source;
-                bool loop = card.Flag("loop", e.Animations[c].Playmode == "auto");
-                if (loop || card.Truthy("clampOnFinish") || byName[states[c]] == home) continue;
-                var back = byName[states[c]].AddTransition(home);
+                if (w.loop || w.hold || byName[w.name] == home) continue;
+                var back = byName[w.name].AddTransition(home);
                 back.hasExitTime = true; back.exitTime = 1; back.duration = 0.25f; back.hasFixedDuration = true;
             }
             var animator = target.GetComponent<Animator>() ?? target.AddComponent<Animator>();
@@ -342,6 +417,76 @@ namespace Zimension.Editor.Conversion
             animator.applyRootMotion = false;
             animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
             if (events && !target.GetComponent<AnimationEvents>()) target.AddComponent<AnimationEvents>();
+        }
+
+        /// <summary>characterBehavior: a CharacterController and CharacterBehaviour on the item, its own colliders replaced.</summary>
+        static void BuildBehaviour(ZimensionImporter.Context ctx, ZimensionItem zi, JsonNode json, JsonNode config, Bounds area)
+        {
+            var go = zi.gameObject;
+            foreach (var c in go.GetComponents<Collider>()) Object.DestroyImmediate(c);
+            foreach (var c in zi.modelRoot.GetComponentsInChildren<Collider>(true)) Object.DestroyImmediate(c);
+            var controller = go.AddComponent<CharacterController>();
+            // The capsule in the item's own (scaled) space: the model's footprint and height.
+            float scale = Mathf.Max(1e-4f, go.transform.lossyScale.y);
+            float height = Mathf.Max(0.5f, area.size.y);
+            controller.height = height;
+            controller.radius = Mathf.Clamp(Mathf.Min(area.size.x, area.size.z) * 0.35f, 0.1f, height / 2);
+            controller.center = new Vector3(area.center.x, area.min.y + height / 2 + controller.skinWidth / scale, area.center.z);
+            controller.stepOffset = Mathf.Min(0.3f / scale, height * 0.3f);
+            controller.slopeLimit = 50;
+            var b = go.AddComponent<CharacterBehaviour>();
+            b.animator = zi.modelRoot.GetComponent<Animator>();
+            b.walkSpeed = Mathf.Clamp(config.Float("walkSpeed", 1.8f), 0.01f, 30);
+            b.runSpeed = Mathf.Clamp(config.Float("runSpeed", 4.5f), 0.01f, 40);
+            if (AvatarMeasure.Forward(zi.modelRoot, out var forward)) b.modelYawOffset = -Mathf.Atan2(forward.x, forward.z) * Mathf.Rad2Deg;
+            var damage = json.Obj("damageSetting");
+            foreach (var j in config["behaviors"].Items)
+            {
+                if (!j.IsObject) continue;
+                var kind = j.Str("behaviorType", "idle");
+                var behaviour = new CharacterBehaviour.Behaviour
+                {
+                    kind = kind == "follow" ? CharacterBehaviour.Kind.Follow : kind == "attack" ? CharacterBehaviour.Kind.Attack : kind == "shoot" ? CharacterBehaviour.Kind.Shoot :
+                           kind == "patrol" ? CharacterBehaviour.Kind.Patrol : CharacterBehaviour.Kind.Idle,
+                    activateEvent = EventValue.Trim(j.Str("activateEvent")), deactivateEvent = EventValue.Trim(j.Str("deactivateEvent")),
+                    runWhileChasing = j.Flag("runWhileChasing", true),
+                    attackImpactDelay = Mathf.Clamp(j.Float("attackImpactDelay", 0.5f), 0, 30),
+                    attackDamage = Mathf.Max(0, j.Float("attackDamage", 10)),
+                    difficulty = j.Str("difficulty", "medium") == "easy" ? CharacterBehaviour.Difficulty.Easy : j.Str("difficulty", "medium") == "hard" ? CharacterBehaviour.Difficulty.Hard : CharacterBehaviour.Difficulty.Medium,
+                    aimReactionDelay = Mathf.Max(0, j.Float("aimReactionDelay", 0.22f)),
+                    loop = j.Flag("loop", true), useRun = j.Truthy("useRun"), waitAtPoint = Mathf.Max(0, j.Float("waitAtPoint", 0)),
+                };
+                foreach (var point in j["patrolPoints"].Items)
+                {
+                    var p = point.Obj("position").IsObject ? point.Obj("position") : point;
+                    behaviour.patrolPoints.Add(new Vector3(-p.Float("x", 0), p.Float("y", 0), p.Float("z", 0)));
+                }
+                if (behaviour.kind == CharacterBehaviour.Kind.Shoot && j.Str("weaponItemId").Length == 0)
+                    ctx.Report.Add(ImportReport.Level.Approximated, "Shoot behaviour has no weapon item; it fires with default damage", "characterBehavior", json);
+                if (!new[] { "idle", "follow", "attack", "shoot", "patrol" }.Contains(kind))
+                    ctx.Report.Add(ImportReport.Level.Approximated, $"Character behaviour '{kind}' is converted as Idle", "characterBehavior", json);
+                b.behaviours.Add(behaviour);
+            }
+            s_PendingWeapons.Add((b, config));
+        }
+
+        static readonly List<(CharacterBehaviour behaviour, JsonNode config)> s_PendingWeapons = new List<(CharacterBehaviour, JsonNode)>();
+
+        /// <summary>Shoot behaviours name their weapon item by id: resolved once every item is converted.</summary>
+        static void ResolveBehaviourWeapons(Dictionary<string, ZimensionItem> byId)
+        {
+            foreach (var (b, config) in s_PendingWeapons)
+            {
+                if (!b) continue;
+                int k = 0;
+                foreach (var j in config["behaviors"].Items)
+                {
+                    if (!j.IsObject) continue;
+                    if (k < b.behaviours.Count && byId.TryGetValue(j.Str("weaponItemId"), out var weapon)) b.behaviours[k].weapon = weapon.GetComponent<Weapon>();
+                    k++;
+                }
+            }
+            s_PendingWeapons.Clear();
         }
 
         static void AddProcedural(ZimensionItem zi, EventCard card)
@@ -542,6 +687,7 @@ namespace Zimension.Editor.Conversion
             w.infiniteAmmo = s.Truthy("infiniteAmmo");
             w.initialAmmo = Mathf.Max(0, (int)s.Num("initialAmmo", 30));
             w.bulletColor = CssStyle.ParseColor(s.Str("bulletColor", "#ff0000"), Color.red);
+            w.fireSound = Sound(w.type == Weapon.WeaponType.Gun ? "gun-shot" : "hit"); w.reloadSound = Sound("reload");
             // The muzzle: gunFireTransform in the weapon's own (three) space.
             if (Coordinates.TryMatrixFromThreeElements(s["gunFireTransform"], out var fire))
             {
@@ -604,6 +750,11 @@ namespace Zimension.Editor.Conversion
             v.wheelSpinAxis = spin == "y" ? Vector3.up : spin == "z" ? Vector3.forward : Vector3.right;
             var seatName = s.Str("seatTargetName");
             if (seatName.Length > 0) v.seat = zi.GetComponentsInChildren<Transform>(true).FirstOrDefault(t => t.name == seatName);
+            var engine = new GameObject("Engine Sound").AddComponent<AudioSource>();
+            engine.transform.SetParent(zi.transform, false);
+            engine.clip = Sound("engine_idle_5"); engine.loop = true; engine.playOnAwake = false; engine.spatialBlend = 1;
+            engine.volume = Mathf.Clamp01(s.Float("soundVolume", 0.5f)); engine.minDistance = 4; engine.maxDistance = 120;
+            v.engineSound = engine;
             if (v.wheels.Length == 0) ctx.Report.Add(ImportReport.Level.Optional, "Vehicle has no wheel names set; it drives without spinning wheels", "vehicleSettings.wheelNames", json);
         }
 
@@ -626,6 +777,8 @@ namespace Zimension.Editor.Conversion
             p.cameraDistance = Mathf.Clamp(avatar.Float("cameraDistance", 3), 0.2f, 30);
             p.cameraHeight = Mathf.Clamp(avatar.Float("cameraHeight", 1.8f), 0.2f, 10);
             p.playerCamera = camera;
+            p.walkLoop = Sound("footstep_2"); p.runLoop = Sound("Runing_final"); p.jumpSound = Sound("jump");
+            p.hitSound = Sound("hit"); p.dieSound = Sound("die-sound"); p.fallSound = Sound("Body_Fall"); p.inventorySound = Sound("inventory");
             var project = ctx.Project;
             if (project && project.avatarPrefab && p.thirdPerson)
             {
@@ -644,21 +797,51 @@ namespace Zimension.Editor.Conversion
                 p.avatar = pivot;
                 var animator = model.GetComponent<Animator>() ?? model.AddComponent<Animator>();
                 animator.applyRootMotion = false;
-                animator.runtimeAnimatorController = PlayerAnimator(ctx, p);
+                animator.runtimeAnimatorController = PlayerAnimator(ctx, p, model);
                 p.animator = animator;
             }
             return p;
         }
 
-        /// <summary>Locomotion blend tree on Speed (Idle, Walk, Run) and a Jump state while not Grounded.</summary>
-        static AnimatorController PlayerAnimator(ZimensionImporter.Context ctx, PlayerController p)
+        static readonly (string state, string[] names, bool loop)[] PlayerStates =
+        {
+            ("Idle", new[] { "Idle" }, true), ("Walk", new[] { "Walk" }, true), ("Run", new[] { "Run" }, true),
+            ("Walk_Backward", new[] { "Walk_Backward" }, true), ("Walk_Left", new[] { "Walk_Left" }, true), ("Walk_Right", new[] { "Walk_Right" }, true),
+            ("Jump", new[] { "Jump" }, false), ("Jump_forward", new[] { "Jump_forward", "Jump" }, false),
+            ("Falling_idle", new[] { "Falling_idle", "Falling_Idle" }, true), ("Falling", new[] { "Falling" }, true),
+            ("Falling_To_Landing", new[] { "Falling_To_Landing" }, false), ("Dying", new[] { "Dying", "Death" }, false),
+        };
+
+        /// <summary>
+        /// The player's Animator: Zimension's player states by name (Idle, Walk, Run, the strafe and back
+        /// walks, Jump_forward, Falling_idle, Falling, Falling_To_Landing, Dying) that PlayerController
+        /// cross-fades, plus a Locomotion blend tree on Speed. Humanoid characters use muscle-space clips.
+        /// </summary>
+        static AnimatorController PlayerAnimator(ZimensionImporter.Context ctx, PlayerController p, GameObject model)
         {
             var project = ctx.Project;
-            var idle = WithLoop(ctx, project.idleClip, true);
-            var walk = WithLoop(ctx, project.walkClip, true);
-            var run = WithLoop(ctx, project.runClip, true);
-            var jump = WithLoop(ctx, project.jumpClip, false);
-            if (!idle && !walk && !run) { ctx.Report.Add(ImportReport.Level.Approximated, "The player character has no Idle/Walk/Run animations", "avatar"); return null; }
+            var known = new Dictionary<string, AnimationClip> { ["Idle"] = project.idleClip, ["Walk"] = project.walkClip, ["Run"] = project.runClip, ["Jump"] = project.jumpClip };
+            var clips = new List<(string state, AnimationClip clip, bool loop)>();
+            foreach (var (state, names, loop) in PlayerStates)
+            {
+                var clip = known.TryGetValue(state, out var k) && k ? k : ZimensionImporter.FindBestClip(ctx, names.ToList(), model.transform, new List<AnimationClip>(), null, "Player");
+                if (clip && !clip.legacy) clips.Add((state, clip, loop));
+            }
+            if (!clips.Any(c => c.state == "Idle" || c.state == "Walk")) { ctx.Report.Add(ImportReport.Level.Approximated, "The player character has no Idle/Walk/Run animations", "avatar"); return null; }
+            var folder = HumanoidRetarget.Folder(ctx);
+            var converted = new Dictionary<string, AnimationClip>();
+            bool humanoid = IsCharacter(model) && HumanoidRetarget.MakeHumanoid(ctx, model, folder, ctx.World.Obj("avatar"));
+            if (humanoid)
+            {
+                foreach (var c in clips)
+                {
+                    var h = HumanoidRetarget.Humanoid(OriginalOf(ctx, c.clip), folder);
+                    if (!h) { humanoid = false; break; }
+                    converted[c.state] = h;
+                }
+                if (!humanoid) model.GetComponent<Animator>().avatar = null;
+            }
+            AnimationClip Clip(string state) { var c = clips.FirstOrDefault(x => x.state == state); return c.clip ? WithLoop(ctx, humanoid ? converted[state] : c.clip, c.loop) : null; }
             var controller = NewController(ctx, "Player");
             controller.AddParameter("Speed", AnimatorControllerParameterType.Float);
             controller.AddParameter("Grounded", AnimatorControllerParameterType.Bool);
@@ -669,21 +852,21 @@ namespace Zimension.Editor.Conversion
             var locomotion = controller.CreateBlendTreeInController("Locomotion", out var tree, 0);
             tree.blendParameter = "Speed";
             tree.useAutomaticThresholds = false;
+            var idle = Clip("Idle"); var walk = Clip("Walk"); var run = Clip("Run");
             if (idle) tree.AddChild(idle, 0);
             if (walk) tree.AddChild(walk, p.walkSpeed);
             if (run) tree.AddChild(run, p.runSpeed);
-            machine.defaultState = locomotion;
-            if (jump)
+            foreach (var c in clips)
             {
-                var air = machine.AddState("Jump");
-                air.motion = jump;
-                var up = locomotion.AddTransition(air);
-                up.AddCondition(AnimatorConditionMode.IfNot, 0, "Grounded"); up.hasExitTime = false; up.duration = 0.12f;
-                var down = air.AddTransition(locomotion);
-                down.AddCondition(AnimatorConditionMode.If, 0, "Grounded"); down.hasExitTime = false; down.duration = 0.15f;
+                var state = machine.AddState(c.state);
+                state.motion = Clip(c.state);
+                state.writeDefaultValues = true;
             }
+            machine.defaultState = machine.states.FirstOrDefault(x => x.state.name == "Idle").state ?? locomotion;
             return controller;
         }
+
+        static AudioClip Sound(string name) => Resources.Load<AudioClip>("ZimensionSounds/" + name);
 
         // ---- Wiring (after the logic script compiled) --------------------------------------------
 
@@ -712,6 +895,7 @@ namespace Zimension.Editor.Conversion
                 case "Weapon": return go.GetComponent<Weapon>();
                 case "Vehicle": return go.GetComponent<Vehicle>();
                 case "Health": return go.GetComponent<Health>();
+                case "Behaviour": return go.GetComponent<CharacterBehaviour>();
                 case "ModelAnimator": return ModelAnimator();
                 case "ModelEvents": { var a = ModelAnimator(); return a ? a.GetComponent<AnimationEvents>() : null; }
                 case "TransitionAnimator": return go.GetComponent<Animator>();

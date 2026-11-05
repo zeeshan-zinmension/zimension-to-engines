@@ -111,6 +111,7 @@ static class Program
             FixtureChecks.Run(Expect);
             DownloadChecks.Run(Expect);
             GeneratorChecks.Run(Expect);
+            InstanceChecks.Run(Expect);
         }
         catch (Exception error)
         {

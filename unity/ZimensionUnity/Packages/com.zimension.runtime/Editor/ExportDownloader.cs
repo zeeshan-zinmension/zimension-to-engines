@@ -452,6 +452,6 @@ namespace Zimension.Editor
     /// <summary>The importer version without UnityEditor references (for the HTTP user agent).</summary>
     public static class ZimensionImporterVersion
     {
-        public const string Value = "0.3.1";
+        public const string Value = "0.3.2";
     }
 }

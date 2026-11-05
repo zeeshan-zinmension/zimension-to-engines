@@ -501,25 +501,33 @@ namespace Zimension.Editor
                 factor = 1f;
                 try
                 {
+                    var bytes = File.ReadAllBytes(Path.GetFullPath(assetPath));
                     if (model.GetComponentsInChildren<SkinnedMeshRenderer>(true).Length == 0
-                        && GltfInfo.SceneSize(GltfInfo.ReadJson(File.ReadAllBytes(Path.GetFullPath(assetPath))), out var expected)
-                        && TryLocalMeshSize(model, out var actual))
+                        && GltfInfo.SceneSize(GltfInfo.ReadJson(bytes), bytes, out var expected, out var exact, out var note)
+                        && TryLocalMeshSize(model, out var actual, out var fromVertices))
                     {
                         float e = Math.Max(expected.X, Math.Max(expected.Y, expected.Z));
                         float a = Mathf.Max(actual.x, Mathf.Max(actual.y, actual.z));
                         if (e > 1e-6f && a > 1e-6f)
                         {
                             float ratio = e / a;
-                            if (ratio < 0.8f || ratio > 1.25f) factor = ratio;
-                            var detail = "";
-                            if (factor != 1f)
+                            // Rescale only on a like-for-like measurement: three.js from decoded vertices,
+                            // Unity from its vertices, the same factor on every axis.
+                            bool uniform = true;
+                            for (int k = 0; k < 3; k++)
                             {
-                                // What differs: each mesh node's scale in the model as Unity built it.
-                                var scales = model.GetComponentsInChildren<MeshFilter>(true).Take(4)
-                                    .Select(f => $"{f.name} {f.transform.lossyScale.x / Mathf.Max(1e-6f, model.lossyScale.x):0.###}" + (f.sharedMesh && f.sharedMesh.isReadable ? "" : " (bounds)"));
-                                detail = $" [mesh nodes: {string.Join(", ", scales)}]";
+                                float ek = k == 0 ? expected.X : k == 1 ? expected.Y : expected.Z, ak = actual[k];
+                                if (ek > e * 0.05f && ak > 1e-6f && Mathf.Abs(ek / ak / ratio - 1) > 0.02f) uniform = false;
                             }
-                            Debug.Log($"[Zimension] Size check '{Path.GetFileName(assetPath)}': three.js {expected.X:0.###} x {expected.Y:0.###} x {expected.Z:0.###}, Unity {actual.x:0.###} x {actual.y:0.###} x {actual.z:0.###}" + (factor != 1f ? $" -> rescaled x{factor:0.####}" : "") + detail);
+                            bool mismatch = ratio < 0.8f || ratio > 1.25f;
+                            bool trusted = exact && fromVertices && uniform;
+                            if (mismatch && trusted) factor = ratio;
+                            Debug.Log($"[Zimension] Size check '{Path.GetFileName(assetPath)}': three.js {expected.X:0.###} x {expected.Y:0.###} x {expected.Z:0.###}" +
+                                      (exact ? "" : $" (from stored bounds: {note})") +
+                                      $", Unity {actual.x:0.###} x {actual.y:0.###} x {actual.z:0.###}" + (fromVertices ? "" : " (from mesh bounds)") +
+                                      (factor != 1f ? $" -> rescaled x{factor:0.####}" : mismatch ? " -> differs, not rescaled (measurement not exact)" : ""));
+                            if (mismatch && !trusted)
+                                ctx.Report.Add(ImportReport.Level.Optional, $"Model '{Path.GetFileName(assetPath)}' may be {1f / ratio:0.##}x its Zimension size (not corrected: {(exact ? "" : note + "; ")}{(fromVertices ? "" : "mesh not readable; ")}{(uniform ? "" : "axes differ")})".Replace("; )", ")"), "file", item);
                         }
                     }
                 }
@@ -532,9 +540,10 @@ namespace Zimension.Editor
         }
 
         /// <summary>Bounds of the model's static meshes in the model root's own space.</summary>
-        static bool TryLocalMeshSize(Transform model, out Vector3 size)
+        static bool TryLocalMeshSize(Transform model, out Vector3 size, out bool fromVertices)
         {
             size = Vector3.zero;
+            fromVertices = true;
             var toRoot = model.worldToLocalMatrix;
             var min = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
             var max = -min;
@@ -547,10 +556,12 @@ namespace Zimension.Editor
                 // The real vertex positions when the mesh is readable (its stored bounds can be stale).
                 if (mesh.isReadable && mesh.vertexCount > 0)
                 {
-                    foreach (var v in mesh.vertices) { var p = m.MultiplyPoint3x4(v); min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
+                    var vertices = mesh.vertices;
+                    foreach (var v in vertices) { var p = m.MultiplyPoint3x4(v); min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
                     any = true;
                     continue;
                 }
+                fromVertices = false;
                 var b = mesh.bounds;
                 for (int c = 0; c < 8; c++)
                 {

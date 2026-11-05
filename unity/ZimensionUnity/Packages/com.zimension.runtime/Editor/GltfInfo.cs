@@ -67,21 +67,28 @@ namespace Zimension.Editor
         }
 
         /// <summary>
-        /// Size of the default scene's static meshes as three.js's GLTFLoader builds them: every
-        /// node's matrix or TRS down the hierarchy applied to its POSITION accessor's min/max (which
-        /// glTF requires), with KHR_mesh_quantization normalized integers scaled to [-1, 1]. False
-        /// when the file has no static mesh bounds to measure (skinned only, or min/max missing).
+        /// Size of the default scene's static meshes as three.js draws them: every node's matrix or TRS
+        /// down the hierarchy applied to the POSITION vertices themselves, decoded from the GLB's binary
+        /// chunk (float, or KHR_mesh_quantization integers, normalized as three does). <paramref name="exact"/>
+        /// is false when some geometry could not be decoded here (Draco or meshopt compression, sparse
+        /// or external buffers) and the accessor's stored min/max stood in; <paramref name="note"/> says why.
         /// </summary>
-        public static bool SceneSize(JsonNode gltf, out System.Numerics.Vector3 size)
+        public static bool SceneSize(JsonNode gltf, byte[] glb, out System.Numerics.Vector3 size, out bool exact, out string note)
         {
-            size = default;
+            size = default; exact = true; note = "";
             var nodes = gltf["nodes"];
-            var scenes = gltf["scenes"];
-            var scene = scenes[gltf["scene"].IsNumber ? (int)gltf["scene"].AsNumber : 0];
+            var scene = gltf["scenes"][gltf["scene"].IsNumber ? (int)gltf["scene"].AsNumber : 0];
             if (!scene.IsObject) return false;
+            var bin = BinaryChunk(glb);
             var min = new System.Numerics.Vector3(float.PositiveInfinity);
             var max = new System.Numerics.Vector3(float.NegativeInfinity);
             bool any = false;
+            var reasons = new HashSet<string>();
+            void Add(System.Numerics.Vector3 p, System.Numerics.Matrix4x4 world)
+            {
+                var w = System.Numerics.Vector3.Transform(p, world);
+                min = System.Numerics.Vector3.Min(min, w); max = System.Numerics.Vector3.Max(max, w);
+            }
             void Visit(int index, System.Numerics.Matrix4x4 parent, int depth)
             {
                 var node = nodes[index];
@@ -91,14 +98,15 @@ namespace Zimension.Editor
                     foreach (var primitive in gltf["meshes"][(int)node["mesh"].AsNumber]["primitives"].Items)
                     {
                         var accessor = gltf["accessors"][primitive["attributes"]["POSITION"].IsNumber ? (int)primitive["attributes"]["POSITION"].AsNumber : -1];
+                        if (!accessor.IsObject) continue;
+                        string why = null;
+                        if (primitive.Obj("extensions").Has("KHR_draco_mesh_compression")) why = "Draco";
+                        else if (ReadPositions(gltf, accessor, bin, p => Add(p, world), out var reason)) { any = true; continue; }
+                        else why = reason;
+                        reasons.Add(why);
                         if (!AccessorBounds(accessor, out var lo, out var hi)) continue;
                         for (int c = 0; c < 8; c++)
-                        {
-                            var p = new System.Numerics.Vector3((c & 1) != 0 ? hi.X : lo.X, (c & 2) != 0 ? hi.Y : lo.Y, (c & 4) != 0 ? hi.Z : lo.Z);
-                            var w = System.Numerics.Vector3.Transform(p, world);
-                            min = System.Numerics.Vector3.Min(min, w);
-                            max = System.Numerics.Vector3.Max(max, w);
-                        }
+                            Add(new System.Numerics.Vector3((c & 1) != 0 ? hi.X : lo.X, (c & 2) != 0 ? hi.Y : lo.Y, (c & 4) != 0 ? hi.Z : lo.Z), world);
                         any = true;
                     }
                 foreach (var child in node["children"].Items)
@@ -107,8 +115,62 @@ namespace Zimension.Editor
             foreach (var root in scene["nodes"].Items)
                 if (root.IsNumber) Visit((int)root.AsNumber, System.Numerics.Matrix4x4.Identity, 0);
             if (!any) return false;
+            exact = reasons.Count == 0;
+            note = string.Join(", ", reasons);
             size = max - min;
             return JsonNode.IsFinite(size.X) && JsonNode.IsFinite(size.Y) && JsonNode.IsFinite(size.Z);
+        }
+
+        /// <summary>The GLB's binary chunk (buffer 0), or null for a .gltf / no chunk.</summary>
+        static byte[] BinaryChunk(byte[] data)
+        {
+            if (data == null || data.Length < 20 || data[0] != 0x67 || data[1] != 0x6C || data[2] != 0x54 || data[3] != 0x46) return null;
+            int offset = 12;
+            while (offset + 8 <= data.Length)
+            {
+                int length = BitConverter.ToInt32(data, offset), type = BitConverter.ToInt32(data, offset + 4);
+                if (length < 0 || offset + 8 + length > data.Length) return null;
+                if (type == 0x004E4942) { var bin = new byte[length]; Buffer.BlockCopy(data, offset + 8, bin, 0, length); return bin; }
+                offset += 8 + ((length + 3) & ~3);
+            }
+            return null;
+        }
+
+        /// <summary>Every POSITION of an accessor, decoded as three.js does (GLTFLoader / getNormalizedComponentScale).</summary>
+        static bool ReadPositions(JsonNode gltf, JsonNode accessor, byte[] bin, Action<System.Numerics.Vector3> each, out string reason)
+        {
+            reason = null;
+            if (accessor.Has("sparse")) { reason = "sparse accessor"; return false; }
+            if (!accessor["bufferView"].IsNumber) { reason = "no buffer view"; return false; }
+            var view = gltf["bufferViews"][(int)accessor["bufferView"].AsNumber];
+            if (view.Obj("extensions").Has("EXT_meshopt_compression") || view.Obj("extensions").Has("KHR_meshopt_compression")) { reason = "meshopt"; return false; }
+            var buffer = gltf["buffers"][(int)view.Num("buffer", 0)];
+            if (bin == null || (int)view.Num("buffer", 0) != 0 || buffer.Has("uri")) { reason = "external buffer"; return false; }
+            int componentType = (int)accessor.Num("componentType", 5126);
+            int componentSize = componentType == 5126 ? 4 : componentType == 5122 || componentType == 5123 ? 2 : componentType == 5120 || componentType == 5121 ? 1 : 0;
+            if (componentSize == 0 || accessor.Str("type") != "VEC3") { reason = "unusual position format"; return false; }
+            int count = (int)accessor.Num("count", 0);
+            int start = (int)view.Num("byteOffset", 0) + (int)accessor.Num("byteOffset", 0);
+            int stride = view["byteStride"].IsNumber ? (int)view["byteStride"].AsNumber : componentSize * 3;
+            if (count <= 0 || start < 0 || stride <= 0 || start + (long)stride * (count - 1) + componentSize * 3 > bin.Length) { reason = "buffer out of range"; return false; }
+            bool normalized = accessor["normalized"].IsBool && accessor["normalized"].AsBool;
+            float Read(int at)
+            {
+                switch (componentType)
+                {
+                    case 5126: return BitConverter.ToSingle(bin, at);
+                    case 5122: { float v = BitConverter.ToInt16(bin, at); return normalized ? Math.Max(v / 32767f, -1f) : v; }
+                    case 5123: { float v = BitConverter.ToUInt16(bin, at); return normalized ? v / 65535f : v; }
+                    case 5120: { float v = (sbyte)bin[at]; return normalized ? Math.Max(v / 127f, -1f) : v; }
+                    default: { float v = bin[at]; return normalized ? v / 255f : v; }
+                }
+            }
+            for (int i = 0; i < count; i++)
+            {
+                int at = start + i * stride;
+                each(new System.Numerics.Vector3(Read(at), Read(at + componentSize), Read(at + componentSize * 2)));
+            }
+            return true;
         }
 
         /// <summary>A node's local transform in the row-vector convention (v * M).</summary>

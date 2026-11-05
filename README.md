@@ -20,7 +20,7 @@ Zimension Unity project ──Zimension > Import from Zimension──▶ downloa
 
 ## Quick start (Windows)
 
-1. Install **Unity 6.3 LTS** (6000.3.x; tested configuration pinned at 6000.3.26f1) with Windows Build Support.
+1. Install **Unity 6.3 LTS** (6000.3.x; tested configuration pinned at 6000.3.28f1) with Windows Build Support.
 2. Get the Unity project: download `ZimensionUnity-<version>.zip` from the repository's Releases
    (or the *Release Unity project* workflow artifact), or clone this repository and use
    `unity/ZimensionUnity`. Open it in Unity Hub (*Add > Add project from disk*). The first open

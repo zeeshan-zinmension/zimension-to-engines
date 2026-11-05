@@ -61,7 +61,7 @@ jobs:
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
         with:
           projectPath: unity/ZimensionUnity
-          unityVersion: 6000.3.26f1
+          unityVersion: 6000.3.28f1
           targetPlatform: StandaloneWindows64
           buildMethod: Zimension.Editor.BatchImport.Run
           customParameters: -zimensionExport ../../samples/event-fixture
@@ -74,7 +74,7 @@ jobs:
           UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
         with:
           projectPath: unity/ZimensionUnity
-          unityVersion: 6000.3.26f1
+          unityVersion: 6000.3.28f1
           targetPlatform: StandaloneWindows64
           allowDirtyBuild: true
       - uses: actions/upload-artifact@v4

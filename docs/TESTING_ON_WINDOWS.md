@@ -22,7 +22,7 @@ git -C zimension-web checkout unity-export
 
 ## 2. Open the project
 
-1. Install **Unity 6.3 LTS** (6000.3.26f1, or any 6000.3 patch) with *Windows Build Support (IL2CPP or Mono)*.
+1. Install **Unity 6.3 LTS** (6000.3.28f1, or any 6000.3 patch) with *Windows Build Support (IL2CPP or Mono)*.
 2. Unity Hub → *Add → Add project from disk* → `zimension-to-engines/unity/ZimensionUnity`.
 3. The first open resolves packages from the Unity registry, so it needs internet once. After
    that, the Zimension package sets up URP, input handling and colour space automatically. If
@@ -129,5 +129,5 @@ The job has not run yet.
 Batch import on your machine. `-zimensionExport` also takes a link or a code (with `-zimensionApi <api base>`):
 
 ```bash
-"C:\Program Files\Unity\Hub\Editor\6000.3.26f1\Editor\Unity.exe" -batchmode -projectPath unity\ZimensionUnity -executeMethod Zimension.Editor.BatchImport.Run -zimensionExport samples\event-fixture -logFile import.log
+"C:\Program Files\Unity\Hub\Editor\6000.3.28f1\Editor\Unity.exe" -batchmode -projectPath unity\ZimensionUnity -executeMethod Zimension.Editor.BatchImport.Run -zimensionExport samples\event-fixture -logFile import.log
 ```

@@ -78,6 +78,10 @@ namespace Zimension.Editor
             public Conversion.LogicWiring.Generated Logic;
             /// <summary>Bundle entry of the environment (sky) image, or null.</summary>
             public string EnvironmentEntry;
+            /// <summary>Skip Humanoid retargeting (a previous import stopped in it).</summary>
+            public bool SkipHumanoid;
+            /// <summary>Skip converting this item name (a previous import stopped in it).</summary>
+            public string SkipConvertItem;
 
             public string AssetFor(string entry) => entry != null && Staged.TryGetValue(entry, out var path) ? path : null;
         }
@@ -88,6 +92,14 @@ namespace Zimension.Editor
             options = options ?? new Options();
             var result = new Result();
             var ctx = new Context { ShowProgress = options.ShowProgress && !Application.isBatchMode, NativeConversion = options.NativeConversion };
+            var stopped = ImportStage.Previous();
+            if (!string.IsNullOrEmpty(stopped))
+            {
+                ImportStage.Warn(stopped);
+                if (stopped.StartsWith("humanoid", StringComparison.Ordinal) || stopped.StartsWith("player animator", StringComparison.Ordinal)) ctx.SkipHumanoid = true;
+                if (stopped.StartsWith("convert item ", StringComparison.Ordinal)) ctx.SkipConvertItem = stopped.Substring("convert item ".Length);
+            }
+            ImportStage.Mark("staging assets");
             try
             {
                 Progress(ctx, "Reading export", 0.02f);
@@ -109,12 +121,14 @@ namespace Zimension.Editor
                     ZimensionProjectSetup.EnsureConfigured(interactive: false);
                     StageAssets(ctx);
                     Progress(ctx, "Importing assets", 0.45f);
+                    ImportStage.Mark("importing models (glTFast)");
                     AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                     FixGltfImportSettings(ctx);
                     PrepareGenerated(ctx);
                     CollectClips(ctx);
                     BuildProject(ctx);
                     Progress(ctx, "Building scenes", 0.7f);
+                    ImportStage.Mark("building scenes");
                     result.ScenePaths = SceneBuilder.BuildScenes(ctx);
                     ctx.Project.compatibilitySummary = ctx.Report.Summary();
                     EditorUtility.SetDirty(ctx.Project);
@@ -150,6 +164,7 @@ namespace Zimension.Editor
             {
                 if (ctx.ShowProgress) EditorUtility.ClearProgressBar();
                 HumanoidRetarget.Cleanup();
+                ImportStage.End();
             }
             return result;
         }

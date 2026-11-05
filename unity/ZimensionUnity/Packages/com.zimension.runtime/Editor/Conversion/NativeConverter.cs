@@ -81,7 +81,9 @@ namespace Zimension.Editor.Conversion
                 var e = new EventItem();
                 EventParsing.ParseItem(e, json, owners);
                 plans.TryGetValue(zi.itemId ?? "", out var plan);
-                try { ConvertItem(ctx, zi, e, plan, byId, paths); }
+                ImportStage.Mark("convert item " + zi.itemName);
+                if (ctx.SkipConvertItem == zi.itemName) ctx.Report.Add(ImportReport.Level.Blocking, "Unity stopped while converting this item last time; its behaviour was skipped", "", json);
+                else try { ConvertItem(ctx, zi, e, plan, byId, paths); }
                 catch (Exception error)
                 {
                     ctx.Report.Add(ImportReport.Level.Blocking, "Item behaviour could not be converted: " + error.Message, "", json);
@@ -114,7 +116,9 @@ namespace Zimension.Editor.Conversion
 
             // Player, game manager and HUD.
             var spawn = worldRoot.GetComponentInChildren<ZimensionSpawnPoint>(true);
+            ImportStage.Mark("player animator");
             var player = BuildPlayer(ctx, sceneWorld, spawn ? spawn.transform : worldRoot.transform, camera);
+            ImportStage.Mark("building scenes");
             var game = new GameObject("Game");
             var manager = game.AddComponent<GameManager>();
             var hud = game.AddComponent<GameHud>();

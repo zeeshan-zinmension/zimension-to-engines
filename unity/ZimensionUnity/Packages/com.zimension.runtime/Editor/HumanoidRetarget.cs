@@ -88,7 +88,12 @@ namespace Zimension.Editor
             if (missing.Count > 0) { problem = "missing " + string.Join(", ", missing); return null; }
             // Unity needs the chain in order: an UpperChest without a Chest is dropped.
             if (!mapped.Contains("Chest")) human.RemoveAll(h => h.humanName.Replace(" ", "") == "UpperChest");
-            var skeleton = root.GetComponentsInChildren<Transform>(true).Select(t => new SkeletonBone
+            // Unity's Avatar needs every skeleton name to be unique: duplicates (common in glTF) make it fail.
+            var all = root.GetComponentsInChildren<Transform>(true);
+            var names = new HashSet<string>();
+            foreach (var t in all) if (!names.Add(t.name)) { var b = human.FirstOrDefault(h => h.boneName == t.name); if (b.boneName != null) { problem = $"bone name '{t.name}' is used twice"; return null; } }
+            var seen = new HashSet<string>();
+            var skeleton = all.Where(t => seen.Add(t.name)).Select(t => new SkeletonBone
             {
                 name = t.name, position = t.localPosition, rotation = t.localRotation, scale = t.localScale,
             }).ToArray();
@@ -148,6 +153,7 @@ namespace Zimension.Editor
             if (clip.humanMotion) return clip;
             if (s_Humanoid.TryGetValue(clip, out var done)) return done;
             s_Humanoid[clip] = null;
+            ImportStage.Mark("humanoid clip " + clip.name);
             if (!Source(clip, folder, out var rig, out var avatar)) return null;
             var handler = new HumanPoseHandler(avatar, rig.transform);
             var pose = new HumanPose();
@@ -198,6 +204,8 @@ namespace Zimension.Editor
         /// </summary>
         public static bool MakeHumanoid(ZimensionImporter.Context ctx, GameObject model, string folder, Zimension.Core.JsonNode owner)
         {
+            if (ctx.SkipHumanoid) return false;
+            ImportStage.Mark("humanoid avatar " + model.name);
             var avatar = BuildAvatar(model.transform, out var problem);
             if (!avatar)
             {

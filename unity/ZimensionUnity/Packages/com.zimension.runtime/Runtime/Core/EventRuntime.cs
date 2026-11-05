@@ -98,7 +98,7 @@ namespace Zimension.Core
 
         public const int MaxDepth = 64;
 
-        static readonly HashSet<string> Builtins = new HashSet<string>(StringComparer.Ordinal)
+        public static readonly HashSet<string> Builtins = new HashSet<string>(StringComparer.Ordinal)
         {
             "reset_player", "reset_world", "player_dead", "die_start_over", "game_over_win",
             "launch_player_up_5m", "launch_player_up_10m", "hit_damge_10", "reduce_health_10", "reduce_health_50", "increase_health_20",
@@ -106,7 +106,7 @@ namespace Zimension.Core
             "save_game", "freeze_player_movement", "unfreeze_player_movement",
         };
 
-        static readonly HashSet<string> AlwaysRegistered = new HashSet<string>(StringComparer.Ordinal) { "on_start", "online_match_started", "online_match_ended" };
+        public static readonly HashSet<string> AlwaysRegistered = new HashSet<string>(StringComparer.Ordinal) { "on_start", "online_match_started", "online_match_ended" };
 
         EventWorld m_World = new EventWorld();
         EventHost m_Host;

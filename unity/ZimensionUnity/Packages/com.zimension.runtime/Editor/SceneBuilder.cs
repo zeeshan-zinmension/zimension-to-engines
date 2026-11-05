@@ -98,6 +98,17 @@ namespace Zimension.Editor
             ctx.Project.baseSceneId = baseId;
             var paths = new List<string>();
             var sceneFolder = $"{ctx.GeneratedFolder}/Scenes";
+            var unityNames = scenes.Select((sc, i) => ZimensionImporter.SafeName($"{ctx.WorldKey}_{(i == 0 ? "Base" : i.ToString())}_{sc.Name}")).ToList();
+            // Unity-native conversion: the world's logic becomes a generated C# script.
+            Conversion.LogicWiring.Generated logic = null;
+            if (ctx.NativeConversion)
+            {
+                var switches = new List<KeyValuePair<string, string>>();
+                for (int i = 0; i < scenes.Count; i++)
+                    if (!string.IsNullOrEmpty(scenes[i].SwitchOnEvent)) switches.Add(new KeyValuePair<string, string>(EventValue.Trim(scenes[i].SwitchOnEvent), unityNames[i]));
+                logic = Conversion.LogicWiring.Generate(ctx, switches);
+                ctx.Logic = logic;
+            }
             int sceneIndex = 0;
             foreach (var scene in scenes)
             {
@@ -123,7 +134,7 @@ namespace Zimension.Editor
                 }
                 foreach (var root in roots) Visit(root, 0);
 
-                var unityName = ZimensionImporter.SafeName($"{ctx.WorldKey}_{(sceneIndex == 0 ? "Base" : sceneIndex.ToString())}_{scene.Name}");
+                var unityName = unityNames[sceneIndex];
                 var path = $"{sceneFolder}/{unityName}.unity";
                 ZimensionImporter.Progress(ctx, $"Building scene {scene.Name}", 0.7f + 0.25f * sceneIndex / Math.Max(1, scenes.Count));
                 var sceneWorld = ctx.Project.WorldForScene(scene.Id);
@@ -168,7 +179,18 @@ namespace Zimension.Editor
                         Debug.LogException(error);
                     }
                 }
+                List<Conversion.FieldBinding> bindings = null;
+                if (logic != null)
+                {
+                    try { bindings = Conversion.NativeConverter.Convert(ctx, logic.Output, rootGo, cam, sceneWorld).Bindings; }
+                    catch (Exception error)
+                    {
+                        ctx.Report.Add(ImportReport.Level.Blocking, "Scene could not be converted to Unity components: " + error.Message, "");
+                        Debug.LogException(error);
+                    }
+                }
                 EditorSceneManager.SaveScene(unityScene, path);
+                if (bindings != null) Conversion.LogicWiring.Queue(path, logic, bindings);
                 paths.Add(path);
                 ctx.Report.Scenes.Add(path);
                 sceneIndex++;
@@ -837,13 +859,14 @@ namespace Zimension.Editor
         static void ReportFeatures(ZimensionImporter.Context ctx, JsonNode item)
         {
             void Unsupported(bool when, string what, string field) { if (when) ctx.Report.Add(ImportReport.Level.Unsupported, what, field, item); }
-            Unsupported(item.Obj("vehicleSettings").Truthy("enable"), "Vehicles are not driven by the Unity runtime yet", "vehicleSettings");
-            Unsupported(item.Obj("fireWeaponSettings").Truthy("enable"), "Weapons are not supported by the Unity runtime yet", "fireWeaponSettings");
-            Unsupported(item.Truthy("pickable"), "Carrying props is not supported by the Unity runtime yet", "pickable");
-            Unsupported(item["characterBehaviors"].Count > 0 || item.Obj("characterBehavior").IsObject, "NPC behaviours (follow, patrol, chase) are not run yet", "characterBehaviors");
+            bool native = ctx.NativeConversion; // the converter reports what it cannot convert itself
+            Unsupported(!native && item.Obj("vehicleSettings").Truthy("enable"), "Vehicles are not driven by the Unity runtime yet", "vehicleSettings");
+            Unsupported(!native && item.Obj("fireWeaponSettings").Truthy("enable"), "Weapons are not supported by the Unity runtime yet", "fireWeaponSettings");
+            Unsupported(!native && item.Truthy("pickable"), "Carrying props is not supported by the Unity runtime yet", "pickable");
+            Unsupported(!native && (item["characterBehaviors"].Count > 0 || item.Obj("characterBehavior").IsObject), "NPC behaviours (follow, patrol, chase) are not run yet", "characterBehaviors");
             Unsupported(!string.IsNullOrEmpty(item.Str("scriptUrl")), "Item JavaScript is not run in Unity", "scriptUrl");
             Unsupported(item.Has("video") || item.Has("videoUrl"), "Video surfaces are not generated yet", "video");
-            Unsupported(item.Obj("damageSetting").Truthy("enable"), "Item damage/health is not simulated yet", "damageSetting");
+            Unsupported(!native && item.Obj("damageSetting").Truthy("enable"), "Item damage/health is not simulated yet", "damageSetting");
             Unsupported(item["attachments"].Count > 0, "Item attachments are not run yet", "attachments");
             foreach (var card in item["animations"].Items)
                 if (card.Str("playmode") == "event" && card.Str("animationSource") != "default" && !item.Truthy("allowAnimations"))

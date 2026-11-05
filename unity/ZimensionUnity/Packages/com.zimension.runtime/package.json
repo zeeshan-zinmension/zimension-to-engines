@@ -1,6 +1,6 @@
 {
   "name": "com.zimension.runtime",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "displayName": "Zimension Runtime",
   "description": "Imports a Zimension project into editable Unity scenes, from a Zimension export link or an export file, and runs its events, logic flows, transitions, sounds, animations, lip sync, player and HUD with ordinary Unity components.",
   "unity": "6000.0",

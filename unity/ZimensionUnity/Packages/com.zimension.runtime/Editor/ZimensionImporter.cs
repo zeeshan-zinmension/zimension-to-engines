@@ -39,6 +39,11 @@ namespace Zimension.Editor
             public bool OpenBaseScene = true;
             public bool UpdateBuildSettings = true;
             public bool ShowProgress = true;
+            /// <summary>
+            /// Convert the world into plain Unity components and a generated C# logic script (default).
+            /// Off: the scenes run the Zimension runtime that interprets the saved world data.
+            /// </summary>
+            public bool NativeConversion = true;
         }
 
         public sealed class Result
@@ -69,6 +74,8 @@ namespace Zimension.Editor
             public readonly Dictionary<string, string> Retargeted = new Dictionary<string, string>(StringComparer.Ordinal);
             public ZimensionProject Project;
             public bool ShowProgress;
+            public bool NativeConversion = true;
+            public Conversion.LogicWiring.Generated Logic;
 
             public string AssetFor(string entry) => entry != null && Staged.TryGetValue(entry, out var path) ? path : null;
         }
@@ -78,7 +85,7 @@ namespace Zimension.Editor
         {
             options = options ?? new Options();
             var result = new Result();
-            var ctx = new Context { ShowProgress = options.ShowProgress && !Application.isBatchMode };
+            var ctx = new Context { ShowProgress = options.ShowProgress && !Application.isBatchMode, NativeConversion = options.NativeConversion };
             try
             {
                 Progress(ctx, "Reading export", 0.02f);
@@ -120,6 +127,13 @@ namespace Zimension.Editor
                     Debug.Log("[Zimension] " + ctx.Report.Summary());
                     if (options.OpenBaseScene && result.ScenePaths.Count > 0 && !Application.isBatchMode)
                         UnityEditor.SceneManagement.EditorSceneManager.OpenScene(result.ScenePaths[0]);
+                    if (ctx.Logic != null)
+                    {
+                        Debug.Log(ctx.Logic.ScriptChanged
+                            ? $"[Zimension] World logic written to {Conversion.LogicWiring.ScriptsRoot}/{ctx.WorldKey}/{ctx.Logic.ClassName}.Generated.cs; the scenes are connected to it as soon as Unity finishes compiling."
+                            : $"[Zimension] World logic {ctx.Logic.ClassName} is unchanged; connecting the scenes.");
+                        Conversion.LogicWiring.TryApply();
+                    }
                 }
             }
             catch (Exception error)

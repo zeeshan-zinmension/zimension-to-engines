@@ -110,6 +110,7 @@ static class Program
             BundleChecks.Run(Expect);
             FixtureChecks.Run(Expect);
             DownloadChecks.Run(Expect);
+            GeneratorChecks.Run(Expect);
         }
         catch (Exception error)
         {

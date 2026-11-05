@@ -29,7 +29,7 @@ namespace Zimension.Unity
             public float fadeDuration = 0.35f;
             public float fadeInDelay;
             [Tooltip("This scene's world-settings overrides (JSON object merged over the world).")]
-            [TextArea(2, 8)] public string worldSettingsJson = "{}";
+            [ZimensionJson("Scene settings (Zimension data)")] public string worldSettingsJson = "{}";
         }
 
         [Header("Source")]
@@ -43,7 +43,7 @@ namespace Zimension.Unity
 
         [Header("World document (editable)")]
         [Tooltip("The saved world object from masterData.json: events, eventBroadcasters, variables, avatar, playerSettings, sounds, soundTriggers, ...")]
-        [TextArea(4, 30)] public string worldJson = "{}";
+        [ZimensionJson("Saved world (Zimension data)")] public string worldJson = "{}";
 
         [Header("World sounds")]
         [Tooltip("Parallel to world.sounds (missing tracks keep their slot as null).")]

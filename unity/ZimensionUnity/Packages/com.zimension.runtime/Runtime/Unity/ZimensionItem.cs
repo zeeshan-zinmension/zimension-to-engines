@@ -10,7 +10,7 @@ namespace Zimension.Unity
     /// so events can address it by id even while it is hidden (the registry includes inactive items).
     ///
     /// Editable: the transform (moved items keep their new place), transition states, sound clips,
-    /// voice data and the item JSON (events, cards, interaction and collect settings). Runtime code
+    /// voice data and, under Advanced, the saved item data (events, cards, interaction and collect settings). Runtime code
     /// reads these at play start and never writes them back.
     /// </summary>
     [DisallowMultipleComponent]
@@ -25,9 +25,6 @@ namespace Zimension.Unity
         public string itemType = "item";
         [Tooltip("Order in masterData worldItems; registration order for event triggers.")]
         public int order;
-
-        [Header("Saved item (editable)")]
-        [TextArea(4, 30)] public string itemJson = "{}";
 
         [Header("Placement")]
         [Tooltip("Saved visibility: false keeps an invisible collider (collider-only items).")]
@@ -50,6 +47,10 @@ namespace Zimension.Unity
         public TextAsset[] voiceData = Array.Empty<TextAsset>();
         [Tooltip("Subtitle text per sound slot (sounds[i].text).")]
         public string[] subtitles = Array.Empty<string>();
+
+        [Header("Advanced")]
+        [Tooltip("The item as saved in Zimension (events, cards, interaction and collect settings). Read at play start.")]
+        [ZimensionJson("Saved Zimension data")] public string itemJson = "{}";
 
         [NonSerialized] JsonNode m_Json;
         [NonSerialized] string m_ParsedFrom;

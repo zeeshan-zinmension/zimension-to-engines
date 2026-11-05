@@ -59,7 +59,7 @@ namespace Zimension.Unity
                 var placement = toSpace * mf.transform.localToWorldMatrix;
                 foreach (var v in mf.sharedMesh.vertices) { float y = placement.MultiplyPoint3x4(v).y; low = Mathf.Min(low, y); high = Mathf.Max(high, y); any = true; }
             }
-            Object.Destroy(baked);
+            if (Application.isPlaying) Object.Destroy(baked); else Object.DestroyImmediate(baked);
             if (!any)
             {
                 // Non-readable meshes: fall back to renderer bounds.

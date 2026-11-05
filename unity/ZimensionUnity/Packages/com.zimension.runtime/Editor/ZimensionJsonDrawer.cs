@@ -21,7 +21,8 @@ namespace Zimension.Editor
         static readonly Dictionary<string, Vector2> s_Scroll = new Dictionary<string, Vector2>();
         static GUIStyle s_Code;
 
-        static string Key(SerializedProperty p) => p.serializedObject.targetObject.GetInstanceID() + ":" + p.propertyPath;
+        // Identity of the inspected object without instance IDs (obsolete in Unity 6).
+        static string Key(SerializedProperty p) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(p.serializedObject.targetObject) + ":" + p.propertyPath;
 
         static string Pretty(string key, string json)
         {

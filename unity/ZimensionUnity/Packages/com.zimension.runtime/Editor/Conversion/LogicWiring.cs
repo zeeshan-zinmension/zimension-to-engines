@@ -107,11 +107,9 @@ namespace Zimension.Editor.Conversion
 
         static Type FindType(string fullName)
         {
-            foreach (var assembly in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                var t = assembly.GetType(fullName, false);
-                if (t != null) return t;
-            }
+            // TypeCache only lists the currently loaded (compiled) script types.
+            foreach (var t in TypeCache.GetTypesDerivedFrom<ZimensionLogic>())
+                if (t.FullName == fullName) return t;
             return null;
         }
 

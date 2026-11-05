@@ -101,8 +101,8 @@ namespace Zimension.Editor
                     Progress(ctx, "Importing assets", 0.45f);
                     AssetDatabase.Refresh(ImportAssetOptions.ForceSynchronousImport);
                     FixGltfImportSettings(ctx);
-                    CollectClips(ctx);
                     PrepareGenerated(ctx);
+                    CollectClips(ctx);
                     BuildProject(ctx);
                     Progress(ctx, "Building scenes", 0.7f);
                     result.ScenePaths = SceneBuilder.BuildScenes(ctx);
@@ -431,6 +431,9 @@ namespace Zimension.Editor
                     foreach (var rest in pool) ordered.Add(rest);
                 }
                 else ordered.AddRange(all);
+                // Playables need Mecanim clips: a clip still imported as Legacy is converted to a generated copy.
+                for (int i = 0; i < ordered.Count; i++)
+                    if (ordered[i] && ordered[i].legacy) ordered[i] = ConvertLegacy(ctx, ordered[i], path);
                 ctx.ModelClips[path] = ordered;
                 ctx.SourceClips[pair.Key] = ordered;
                 foreach (var clip in ordered)
@@ -440,6 +443,23 @@ namespace Zimension.Editor
                     ctx.LibraryClips.Add(clip);
                 }
             }
+        }
+
+        static AnimationClip ConvertLegacy(Context ctx, AnimationClip legacy, string sourcePath)
+        {
+            var copy = new AnimationClip { name = legacy.name, frameRate = legacy.frameRate, legacy = false, wrapMode = legacy.wrapMode };
+            foreach (var binding in AnimationUtility.GetCurveBindings(legacy))
+            {
+                var curve = AnimationUtility.GetEditorCurve(legacy, binding);
+                if (curve != null) AnimationUtility.SetEditorCurve(copy, binding, curve);
+            }
+            copy.EnsureQuaternionContinuity();
+            var folder = $"{ctx.GeneratedFolder}/Animations/Converted";
+            EnsureFolder(folder);
+            var path = AssetDatabase.GenerateUniqueAssetPath($"{folder}/{SafeName(Path.GetFileNameWithoutExtension(sourcePath))}_{SafeName(legacy.name)}.anim");
+            AssetDatabase.CreateAsset(copy, path);
+            ctx.Report.Add(ImportReport.Level.Optional, $"Clip '{legacy.name}' in {Path.GetFileName(sourcePath)} was imported as Legacy and converted for playback", "animations");
+            return copy;
         }
 
         static void PrepareGenerated(Context ctx)
@@ -524,6 +544,8 @@ namespace Zimension.Editor
                 names.Add(action);
                 names.AddRange(fallbacks);
                 var clip = FindBestClip(ctx, names, prefab.transform, own, sourceClips, "Player");
+                if (clip)
+                    ctx.Report.Add(ImportReport.Level.Optional, $"Player '{action}' plays '{clip.name}' ({Path.GetFileName(AssetDatabase.GetAssetPath(clip))}, skeleton fit {ClipRetarget.DirectCoverage(clip, prefab.transform):P0})", "avatar.character");
                 if (!clip)
                     ctx.Report.Add(ImportReport.Level.Approximated, $"Player '{action}' animation is not available for the character; the avatar stays posed for it", "avatar.character.characterAnimationMap");
                 return clip;
@@ -533,6 +555,31 @@ namespace Zimension.Editor
             project.walkClip = Resolve("Walk", "Walking", "walk_forward");
             project.runClip = Resolve("Run", "Running", "running_forward");
             project.jumpClip = Resolve("Jump_forward", "Jump", "Jumping", "jump_normal");
+        }
+
+        /// <summary>
+        /// The packaged animation library (rpm_m, rpm_f, ultron, zimension, mixamo, custom, ...) whose
+        /// clips fit this skeleton best, in its glTF clip order; null when none fits at least half.
+        /// </summary>
+        internal static List<AnimationClip> BestLibraryFor(Context ctx, Transform modelRoot, out string name, out float fit)
+        {
+            name = ""; fit = 0;
+            List<AnimationClip> best = null; float bestDirect = -1, bestNamed = -1;
+            foreach (var asset in ctx.Report.Assets)
+            {
+                if (asset.Role != "animation-library" || !ctx.ModelClips.TryGetValue(asset.Path, out var clips) || clips.Count == 0) continue;
+                var probe = clips.FirstOrDefault(c => c);
+                if (!probe) continue;
+                float direct = ClipRetarget.DirectCoverage(probe, modelRoot);
+                float named = direct >= 0.999f ? 1 : ClipRetarget.NameCoverage(probe, modelRoot);
+                if (direct > bestDirect + 1e-4f || (Mathf.Abs(direct - bestDirect) <= 1e-4f && named > bestNamed))
+                {
+                    best = clips; bestDirect = direct; bestNamed = named; name = Path.GetFileName(asset.Path);
+                }
+            }
+            if (best == null || bestNamed < 0.5f) { name = ""; return null; }
+            fit = Mathf.Max(bestDirect, bestNamed);
+            return best;
         }
 
         /// <summary>Avatar.normalizeAnimationName: lowercase letters and digits only.</summary>

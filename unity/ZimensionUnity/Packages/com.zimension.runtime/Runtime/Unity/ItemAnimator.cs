@@ -94,6 +94,12 @@ namespace Zimension.Unity
                     continue;
                 }
                 var clip = item.clips[card.Clip];
+                if (clip && clip.legacy)
+                {
+                    m_Warnings.Add($"Animation '{clip.name}' on '{item.itemName}' is a Legacy clip and cannot play; re-import the world to convert it.");
+                    card.Clip = -1;
+                    continue;
+                }
                 bool loop = a.Flag("loop", card.Playmode == "auto");
                 Resolve(card, clip ? clip.length : 0, a.Float("speed", 1), a.Float("startTime", -1), a.Float("endTime", -1), loop, a.Truthy("reverse"), a.Truthy("clampOnFinish"));
             }

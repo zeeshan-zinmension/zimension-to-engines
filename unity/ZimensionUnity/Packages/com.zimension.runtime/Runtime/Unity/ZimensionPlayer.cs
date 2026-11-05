@@ -116,7 +116,15 @@ namespace Zimension.Unity
             var clips = new[] { project.idleClip, project.walkClip, project.runClip, project.jumpClip };
             bool any = false;
             foreach (var c in clips) any |= c;
-            if (!any) return;
+            if (!any)
+            {
+                Debug.LogWarning("[Zimension] The player character has no Idle/Walk/Run/Jump animations, so it does not animate. " +
+                                 "The import report (ZimensionProject > Import report) says why; re-import after exporting the world again from the Zimension editor.");
+                return;
+            }
+            for (int i = 0; i < 4; i++)
+                if (clips[i] && clips[i].legacy) { Debug.LogWarning($"[Zimension] Player clip '{clips[i].name}' is a Legacy clip and cannot play; re-import (Zimension > Import from Zimension) to convert it."); clips[i] = null; }
+            Debug.Log($"[Zimension] Player animations: Idle={Name(clips[0])}, Walk={Name(clips[1])}, Run={Name(clips[2])}, Jump={Name(clips[3])}");
             var animator = model.GetComponent<Animator>();
             if (!animator) animator = model.AddComponent<Animator>();
             animator.applyRootMotion = false;
@@ -135,6 +143,8 @@ namespace Zimension.Unity
             AnimationPlayableOutput.Create(m_Graph, "Locomotion", animator).SetSourcePlayable(m_Mixer);
             m_Graph.Play();
         }
+
+        static string Name(AnimationClip c) => c ? c.name : "(none)";
 
         /// <summary>Remember the spawn pose for reset_player / respawn.</summary>
         public void SetSpawn(Vector3 position, float yaw)

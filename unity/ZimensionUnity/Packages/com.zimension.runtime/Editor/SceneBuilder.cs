@@ -365,6 +365,26 @@ namespace Zimension.Editor
             // Clips: the model's own (glTF order, so animationIndex matches), then the cards' library clips.
             var clips = new List<AnimationClip>(ctx.ModelClips.TryGetValue(path, out var own) ? own : new List<AnimationClip>());
             var clipNames = clips.Select(c => c ? c.name : "").ToList();
+            if (item.Truthy("allowAnimations") && instance.GetComponentsInChildren<SkinnedMeshRenderer>(true).Any(r => r.bones != null && r.bones.Length >= 10))
+            {
+                // Engine.checkCharacterAnimations + WorldItem.copyAnimations: a character also gets the
+                // matching library's clips after its own (same-named clips skipped), so cards can name or
+                // index them.
+                var library = ZimensionImporter.BestLibraryFor(ctx, instance.transform, out var libraryName, out var fit);
+                if (library != null)
+                {
+                    int added = 0;
+                    foreach (var clip in library)
+                    {
+                        if (!clip || clipNames.Contains(clip.name)) continue;
+                        var bound = ZimensionImporter.BindClip(ctx, clip, instance.transform, zi.itemName);
+                        if (!bound) continue;
+                        clips.Add(bound); clipNames.Add(clip.name); added++;
+                    }
+                    ctx.Report.Add(ImportReport.Level.Optional, $"Character uses {added} clips from animation library '{libraryName}' (skeleton fit {fit:P0})", "animations", item);
+                }
+                else ctx.Report.Add(ImportReport.Level.Approximated, "No packaged animation library fits this character's skeleton; only its own clips play", "animations", item);
+            }
             if (item.Truthy("allowAnimations"))
             {
                 var sources = ZimensionImporter.SourceClipsByName(ctx, item["characterAnimationSources"]);

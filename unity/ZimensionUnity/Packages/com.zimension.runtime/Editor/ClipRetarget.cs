@@ -77,7 +77,11 @@ namespace Zimension.Editor
             if (bindings.Length == 0) return null;
             int direct = 0;
             foreach (var b in bindings) if (PathExists(targetRoot, b.path)) direct++;
-            if (direct == bindings.Length) { coverage = 1; return source; }
+            // The model root is placed (scaled, turned) by its owner: a clip must not animate it. glTFast names
+            // transform curves localPosition/localRotation/localScale; Unity may report m_Local* names.
+            bool rootTransformCurves = false;
+            foreach (var b in bindings) if (b.path.Length == 0 && b.type == typeof(Transform)) { rootTransformCurves = true; break; }
+            if (direct == bindings.Length && !rootTransformCurves) { coverage = 1; return source; }
             var map = new Dictionary<string, string>();
             Collect(targetRoot, targetRoot, "", map);
             var clip = new AnimationClip { name = source.name, frameRate = source.frameRate, legacy = false };
@@ -86,13 +90,16 @@ namespace Zimension.Editor
             foreach (var b in bindings)
             {
                 string path = b.path;
+                bool position = b.propertyName.StartsWith("m_LocalPosition") || b.propertyName.StartsWith("localPosition");
+                bool scale = b.propertyName.StartsWith("m_LocalScale") || b.propertyName.StartsWith("localScale");
+                if (path.Length == 0 && b.type == typeof(Transform)) { bound++; continue; } // root stays where its owner put it
                 if (!PathExists(targetRoot, path))
                 {
                     var key = BoneKey(path);
                     if (!map.TryGetValue(key, out path)) continue;
                     // Bone lengths differ between rigs: keep translation on the hips only.
-                    if (b.propertyName.StartsWith("m_LocalPosition") && key != hipsKey) continue;
-                    if (b.propertyName.StartsWith("m_LocalScale")) continue;
+                    if (position && key != hipsKey) { bound++; continue; }
+                    if (scale) { bound++; continue; }
                 }
                 var curve = AnimationUtility.GetEditorCurve(source, b);
                 if (curve == null) continue;

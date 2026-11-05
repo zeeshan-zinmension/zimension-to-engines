@@ -23,14 +23,22 @@ namespace Zimension.Editor
     public static class ZimensionProjectSetup
     {
         const string SettingsFolder = "Assets/Zimension/Settings";
+        const string UrpPackage = "com.unity.render-pipelines.universal";
+#if ZIMENSION_URP
+        const string SetupFlag = "Zimension.SetupChecked.Urp";
+#else
+        const string SetupFlag = "Zimension.SetupChecked.NoUrp";
+        static UnityEditor.PackageManager.Requests.AddRequest s_UrpRequest;
+#endif
 
         static ZimensionProjectSetup()
         {
             // Run once the editor is idle (not during the domain reload that loaded this class).
             EditorApplication.delayCall += () =>
             {
-                if (Application.isBatchMode || SessionState.GetBool("Zimension.SetupChecked", false)) return;
-                SessionState.SetBool("Zimension.SetupChecked", true);
+                // Keyed on URP presence: after URP is installed (a domain reload), setup runs again to assign it.
+                if (Application.isBatchMode || SessionState.GetBool(SetupFlag, false)) return;
+                SessionState.SetBool(SetupFlag, true);
                 EnsureConfigured(interactive: false);
             };
         }
@@ -56,6 +64,18 @@ namespace Zimension.Editor
             PlayerSettings.legacyClampBlendShapeWeights = false;
             return notes.ToString().Trim();
         }
+
+#if !ZIMENSION_URP
+        static void WatchUrpInstall()
+        {
+            if (s_UrpRequest == null || !s_UrpRequest.IsCompleted) return;
+            EditorApplication.update -= WatchUrpInstall;
+            if (s_UrpRequest.Status == UnityEditor.PackageManager.StatusCode.Success)
+                Debug.Log($"[Zimension] Installed {s_UrpRequest.Result.name} {s_UrpRequest.Result.version}; URP is assigned after the script reload.");
+            else
+                Debug.LogWarning($"[Zimension] Could not install URP ({s_UrpRequest.Error?.message}). The project keeps working with the Built-in pipeline; add Universal RP in the Package Manager to switch.");
+        }
+#endif
 
         static bool EnsureInputHandling()
         {
@@ -103,7 +123,14 @@ namespace Zimension.Editor
             AssetDatabase.SaveAssets();
             return "URP asset created and assigned (" + assetPath + ").";
 #else
-            return "URP package is not installed: materials use the Built-in pipeline. Add com.unity.render-pipelines.universal for the supported configuration.";
+            // Not pinned in the project: install the URP version that matches this editor (any Unity 6).
+            if (s_UrpRequest == null && !Application.isBatchMode)
+            {
+                s_UrpRequest = UnityEditor.PackageManager.Client.Add(UrpPackage);
+                EditorApplication.update += WatchUrpInstall;
+                return "Installing the Universal Render Pipeline for this editor version (it is set up automatically when done).";
+            }
+            return "URP package is not installed: materials use the Built-in pipeline until it is (Window > Package Manager > Universal RP).";
 #endif
         }
     }

@@ -520,7 +520,9 @@ namespace Zimension.Editor
                                 if (ek > e * 0.05f && ak > 1e-6f && Mathf.Abs(ek / ak / ratio - 1) > 0.02f) uniform = false;
                             }
                             bool mismatch = ratio < 0.8f || ratio > 1.25f;
-                            bool trusted = exact && fromVertices && uniform;
+                            // A huge uniform difference (the 174x rifle) is unmistakable even when one side
+                            // came from stored bounds; small ones (2x) are corrected only when exact.
+                            bool trusted = uniform && ((exact && fromVertices) || ratio > 4f || ratio < 0.25f);
                             if (mismatch && trusted) factor = ratio;
                             Debug.Log($"[Zimension] Size check '{Path.GetFileName(assetPath)}': three.js {expected.X:0.###} x {expected.Y:0.###} x {expected.Z:0.###}" +
                                       (exact ? "" : $" (from stored bounds: {note})") +
@@ -554,12 +556,22 @@ namespace Zimension.Editor
                 if (!mesh || filter.name == "collider_mesh_zim") continue;
                 var m = toRoot * filter.transform.localToWorldMatrix;
                 // The real vertex positions when the mesh is readable (its stored bounds can be stale).
-                if (mesh.isReadable && mesh.vertexCount > 0)
+                if (mesh.vertexCount > 0)
                 {
-                    var vertices = mesh.vertices;
-                    foreach (var v in vertices) { var p = m.MultiplyPoint3x4(v); min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
-                    any = true;
-                    continue;
+                    try
+                    {
+                        // Mesh data without needing Read/Write enabled on the mesh.
+                        using (var data = Mesh.AcquireReadOnlyMeshData(mesh))
+                        {
+                            var vertices = new global::Unity.Collections.NativeArray<Vector3>(mesh.vertexCount, global::Unity.Collections.Allocator.Temp);
+                            data[0].GetVertices(vertices);
+                            foreach (var v in vertices) { var p = m.MultiplyPoint3x4(v); min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
+                            vertices.Dispose();
+                        }
+                        any = true;
+                        continue;
+                    }
+                    catch (Exception) { /* fall back to the stored bounds */ }
                 }
                 fromVertices = false;
                 var b = mesh.bounds;

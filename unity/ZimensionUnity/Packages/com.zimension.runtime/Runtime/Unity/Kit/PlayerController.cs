@@ -155,6 +155,7 @@ namespace Zimension.Kit
 
         public void Teleport(Vector3 position, float yaw)
         {
+            if (!m_Controller) m_Controller = GetComponent<CharacterController>();
             m_Controller.enabled = false;
             if (Physics.SphereCast(position + Vector3.up * 0.5f, Radius * 0.9f, Vector3.down, out var hit, 3f, ~0, QueryTriggerInteraction.Ignore)) position.y = hit.point.y + 0.01f;
             transform.SetPositionAndRotation(position, Quaternion.Euler(0, yaw, 0));
@@ -190,7 +191,7 @@ namespace Zimension.Kit
                 move = ZimensionInput.Move;
                 sprint = sprintEnabled && (autoSprint ^ (ZimensionInput.Key(KeyCode.LeftShift) || ZimensionInput.Key(KeyCode.RightShift)));
                 jump = jumpEnabled && ZimensionInput.KeyDown(KeyCode.Space);
-                if (ZimensionInput.KeyDown(KeyCode.F)) UseSelected();
+                if (ZimensionInput.KeyDown(KeyCode.F)) { UseSelected(); if (CurrentVehicle) return; } // now driving: the vehicle moves us
                 if (ZimensionInput.KeyDown(KeyCode.G) && CurrentWeapon) DropWeapon();
             }
             var yaw = Quaternion.Euler(0, m_Yaw, 0);

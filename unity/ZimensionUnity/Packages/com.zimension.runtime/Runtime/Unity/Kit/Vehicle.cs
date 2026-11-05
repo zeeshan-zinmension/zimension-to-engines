@@ -64,6 +64,7 @@ namespace Zimension.Kit
         Quaternion[] m_SteerBase = new Quaternion[0];
         Quaternion m_ModelOffset = Quaternion.identity;
         float m_CamYaw, m_CamPitch = 12;
+        int m_EnteredFrame = -1;
 
         public override string Prompt => Driver ? exitLabel : enterLabel;
         public override bool Available => base.Available && !Driver;
@@ -98,6 +99,7 @@ namespace Zimension.Kit
         {
             if (Driver || !player) return;
             Driver = player;
+            m_EnteredFrame = Time.frameCount; // the F press that entered must not also exit
             var f = Forward; f.y = 0;
             m_Yaw = Mathf.Atan2(f.x, f.z) * Mathf.Rad2Deg;
             m_CamYaw = m_Yaw;
@@ -127,7 +129,7 @@ namespace Zimension.Kit
             if (!Driver) return;
             float dt = Time.deltaTime;
             bool input = !Driver.InputBlocked;
-            if (input && ZimensionInput.KeyDown(KeyCode.F)) { Exit(); return; }
+            if (input && Time.frameCount != m_EnteredFrame && ZimensionInput.KeyDown(KeyCode.F)) { Exit(); return; }
             var move = input ? ZimensionInput.Move : Vector2.zero;
             bool handbrake = input && ZimensionInput.Key(KeyCode.Space);
             bool boosting = input && boostEnabled && m_BoostLeft > 0 && (ZimensionInput.Key(KeyCode.LeftShift) || ZimensionInput.Key(KeyCode.RightShift)) && move.y > 0;

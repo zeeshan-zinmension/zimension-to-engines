@@ -219,7 +219,7 @@ namespace Zimension.Unity
             var avatar = m_World.Obj("avatar");
             float fov = avatar.Float("fov", m_World.Float("fov", 0));
             if (fov > 1 && fov < 170) playCamera.fieldOfView = fov;
-            if (!FindFirstObjectByType<AudioListener>()) playCamera.gameObject.AddComponent<AudioListener>();
+            if (!FindAnyObjectByType<AudioListener>()) playCamera.gameObject.AddComponent<AudioListener>();
         }
 
         void SetupPlayer()
@@ -248,7 +248,7 @@ namespace Zimension.Unity
                 }
                 return;
             }
-            m_Player = FindFirstObjectByType<ZimensionPlayer>();
+            m_Player = FindAnyObjectByType<ZimensionPlayer>();
             if (!m_Player)
             {
                 var go = new GameObject("Zimension Player");

@@ -5,9 +5,15 @@ install or licence. They are for development and CI only; Unity never sees them.
 
 ```bash
 tools/compile-check/fetch-refs.sh .unity-refs
-dotnet build tools/compile-check/Runtime.csproj -p:UnityRefs=$PWD/.unity-refs/engine
-dotnet build tools/compile-check/Editor.csproj  -p:UnityRefs=$PWD/.unity-refs/engine -p:UnityEditorRefs=$PWD/.unity-refs/editor
+dotnet build tools/compile-check/Core.csproj
+dotnet build tools/compile-check/Runtime.csproj
+dotnet build tools/compile-check/Editor.csproj
 ```
+
+Each project builds one Unity assembly on its own (`Zimension.Core`, `Zimension.Runtime`,
+`Zimension.Editor`), referencing the others as separate assemblies. That way an `internal`
+member used across an assembly boundary fails here exactly as it does in Unity. Obsolete-API
+warnings are errors.
 
 The reference assemblies are from Unity 2021 (the newest published on NuGet). They catch syntax,
 type and most API errors; APIs added after 2021 are avoided or guarded. The URP setup code is

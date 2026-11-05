@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    Compile-checks the Editor assembly (with the runtime sources) outside Unity against UnityEditor
-    and UnityEngine reference assemblies. Not used by Unity. See tools/compile-check/README.md.
+    Zimension.Editor exactly as Unity builds it: a separate assembly that sees only the public API of
+    Zimension.Core and Zimension.Runtime, compiled against UnityEditor/UnityEngine reference assemblies.
   -->
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
@@ -9,14 +9,16 @@
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <NoWarn>CS0618;CS0649;CS0169;CS0414</NoWarn>
-    <AssemblyName>Zimension.Editor.Check</AssemblyName>
-    <UnityRefs Condition="'$(UnityRefs)' == ''">/tmp/claude-0/refs/m/lib/netstandard2.0</UnityRefs>
-    <UnityEditorRefs Condition="'$(UnityEditorRefs)' == ''">/tmp/claude-0/refs/editor</UnityEditorRefs>
+    <AssemblyName>Zimension.Editor</AssemblyName>
+    <NoWarn>CS0649;CS0169;CS0414</NoWarn>
+    <WarningsAsErrors>CS0618;CS0619</WarningsAsErrors>
+    <UnityRefs Condition="'$(UnityRefs)' == ''">$(MSBuildThisFileDirectory)../../.unity-refs/engine</UnityRefs>
+    <UnityEditorRefs Condition="'$(UnityEditorRefs)' == ''">$(MSBuildThisFileDirectory)../../.unity-refs/editor</UnityEditorRefs>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Runtime/**/*.cs" />
     <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Editor/**/*.cs" />
+    <ProjectReference Include="Core.csproj" />
+    <ProjectReference Include="Runtime.csproj" />
     <Reference Include="$(UnityRefs)/*.dll" Private="false" />
     <Reference Include="$(UnityEditorRefs)/*.dll" Private="false" />
   </ItemGroup>

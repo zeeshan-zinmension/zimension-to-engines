@@ -59,7 +59,7 @@ namespace Zimension.Core
 
         // ---- JavaScript conversions --------------------------------------------------------
 
-        internal static string Trim(string s) => (s ?? string.Empty).Trim(' ', '\t', '\r', '\n');
+        public static string Trim(string s) => (s ?? string.Empty).Trim(' ', '\t', '\r', '\n');
 
         /// <summary>JavaScript String(value).</summary>
         public static string Display(EventValue v)

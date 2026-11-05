@@ -150,9 +150,9 @@ namespace Zimension.Core
             return list;
         }
 
-        internal static bool IsFinite(double d) => !double.IsNaN(d) && !double.IsInfinity(d);
+        public static bool IsFinite(double d) => !double.IsNaN(d) && !double.IsInfinity(d);
 
-        internal static bool TryParseNumber(string text, out double value) =>
+        public static bool TryParseNumber(string text, out double value) =>
             double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value);
 
         // ---- Parsing ----------------------------------------------------------------------

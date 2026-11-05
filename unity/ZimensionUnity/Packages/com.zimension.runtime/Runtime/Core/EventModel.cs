@@ -88,7 +88,7 @@ namespace Zimension.Core
         public bool Loop;
         public JsonNode Source = JsonNode.Undefined;
 
-        internal static EventCard FromJson(JsonNode j, string stopKey, string finishedKey)
+        public static EventCard FromJson(JsonNode j, string stopKey, string finishedKey)
         {
             var c = new EventCard
             {
@@ -178,7 +178,7 @@ namespace Zimension.Core
     /// <summary>Saved world/item JSON to the event model (native Events.cpp parseEventWorld / parseEventItem).</summary>
     public static class EventParsing
     {
-        internal static float Seconds(JsonNode j, float fallback)
+        public static float Seconds(JsonNode j, float fallback)
         {
             if (j.IsNumber) { float n = (float)j.AsNumber; return float.IsNaN(n) || float.IsInfinity(n) ? fallback : n; }
             if (j.IsString)

@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!--
-    Compile-checks the Unity runtime assembly outside Unity against UnityEngine reference
-    assemblies. Not used by Unity. UnityRefs must point at a folder of UnityEngine*.dll
-    reference assemblies (see tools/compile-check/README.md).
+    Zimension.Runtime exactly as Unity builds it: a separate assembly that sees only Zimension.Core's
+    public API, compiled against UnityEngine reference assemblies. Obsolete-API warnings are errors.
+    See tools/compile-check/README.md.
   -->
   <PropertyGroup>
     <TargetFramework>netstandard2.1</TargetFramework>
@@ -10,12 +10,14 @@
     <Nullable>disable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
-    <NoWarn>CS0618;CS0649;CS0169;CS0414</NoWarn>
-    <AssemblyName>Zimension.Runtime.Check</AssemblyName>
-    <UnityRefs Condition="'$(UnityRefs)' == ''">/tmp/claude-0/refs/m/lib/netstandard2.0</UnityRefs>
+    <AssemblyName>Zimension.Runtime</AssemblyName>
+    <NoWarn>CS0649;CS0169;CS0414</NoWarn>
+    <WarningsAsErrors>CS0618;CS0619</WarningsAsErrors>
+    <UnityRefs Condition="'$(UnityRefs)' == ''">$(MSBuildThisFileDirectory)../../.unity-refs/engine</UnityRefs>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Runtime/**/*.cs" />
+    <Compile Include="../../unity/ZimensionUnity/Packages/com.zimension.runtime/Runtime/Unity/**/*.cs" />
+    <ProjectReference Include="Core.csproj" />
     <Reference Include="$(UnityRefs)/*.dll" Private="false" />
   </ItemGroup>
 </Project>

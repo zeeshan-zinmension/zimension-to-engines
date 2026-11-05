@@ -31,10 +31,12 @@ jobs:
         run: tools/e2e-link.sh
       - name: Fetch Unity reference assemblies
         run: tools/compile-check/fetch-refs.sh .unity-refs
-      - name: Compile runtime against UnityEngine
-        run: dotnet build tools/compile-check/Runtime.csproj -p:UnityRefs=$PWD/.unity-refs/engine
-      - name: Compile editor importer against UnityEditor
-        run: dotnet build tools/compile-check/Editor.csproj -p:UnityRefs=$PWD/.unity-refs/engine -p:UnityEditorRefs=$PWD/.unity-refs/editor
+      - name: Compile Zimension.Core alone (no Unity references)
+        run: dotnet build tools/compile-check/Core.csproj
+      - name: Compile Zimension.Runtime as its own assembly against UnityEngine
+        run: dotnet build tools/compile-check/Runtime.csproj
+      - name: Compile Zimension.Editor as its own assembly against UnityEditor
+        run: dotnet build tools/compile-check/Editor.csproj
 
   unity:
     # Opens the template project in the pinned Unity editor, imports the sample export and builds a

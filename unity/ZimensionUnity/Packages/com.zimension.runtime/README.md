@@ -11,3 +11,7 @@ Imports a Zimension project export into editable Unity scenes and runs its workf
 Assemblies: `Zimension.Core` (engine-free event runtime), `Zimension.Runtime` (Unity host),
 `Zimension.Editor` (importer). Documentation: the repository's `docs/` folder
 (https://github.com/zeeshan-zinmension/zimension-to-engines).
+
+Third-party: the play UI uses the Ubuntu font (Runtime/Resources/ZimensionFonts), © Canonical Ltd,
+under the Ubuntu Font Licence 1.0 (LICENSE-UbuntuFontLicence.txt beside the fonts), matching the
+Zimension web player's UI font.

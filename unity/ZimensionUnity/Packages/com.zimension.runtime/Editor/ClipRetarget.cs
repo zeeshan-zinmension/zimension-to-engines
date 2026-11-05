@@ -41,6 +41,30 @@ namespace Zimension.Editor
 
         static bool PathExists(Transform root, string path) => path.Length == 0 || root.Find(path) != null;
 
+        /// <summary>Fraction of a clip's curves whose transform path exists as-is under the root (1 = same rig).</summary>
+        public static float DirectCoverage(AnimationClip clip, Transform root)
+        {
+            if (!clip || !root) return 0;
+            var bindings = AnimationUtility.GetCurveBindings(clip);
+            if (bindings.Length == 0) return 0;
+            int found = 0;
+            foreach (var b in bindings) if (PathExists(root, b.path)) found++;
+            return (float)found / bindings.Length;
+        }
+
+        /// <summary>Fraction of a clip's bones that can be found under the root by name (direct or remapped).</summary>
+        public static float NameCoverage(AnimationClip clip, Transform root)
+        {
+            if (!clip || !root) return 0;
+            var bindings = AnimationUtility.GetCurveBindings(clip);
+            if (bindings.Length == 0) return 0;
+            var map = new Dictionary<string, string>();
+            Collect(root, root, "", map);
+            int found = 0;
+            foreach (var b in bindings) if (PathExists(root, b.path) || map.ContainsKey(BoneKey(b.path))) found++;
+            return (float)found / bindings.Length;
+        }
+
         /// <summary>
         /// The clip bound to <paramref name="targetRoot"/>'s hierarchy, or the source itself when it
         /// already binds; null when too few curves can be bound (an incompatible rig).

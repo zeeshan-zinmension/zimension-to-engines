@@ -373,17 +373,11 @@ namespace Zimension.Editor
                     var clipName = card.Str("animationName");
                     if (card.Str("animationSource") == "default" || string.IsNullOrEmpty(clipName)) continue;
                     if (clipNames.Contains(clipName)) continue;
-                    AnimationClip library = null;
-                    if (!sources.TryGetValue(clipName, out library)) ctx.LibraryByName.TryGetValue(clipName, out library);
-                    if (!library)
-                    {
-                        ctx.Report.Add(ImportReport.Level.Approximated, $"Animation '{clipName}' is not in the export; its card does nothing", "animations", item);
-                        continue;
-                    }
-                    var bound = ZimensionImporter.BindClip(ctx, library, instance.transform, zi.itemName);
+                    // Character library clips (Idle, Talking, ...) chosen by how well they fit this model's skeleton.
+                    var bound = ZimensionImporter.FindBestClip(ctx, new List<string> { clipName }, instance.transform, new List<AnimationClip>(), sources, zi.itemName);
                     if (!bound)
                     {
-                        ctx.Report.Add(ImportReport.Level.Approximated, $"Animation '{clipName}' does not fit this model's skeleton", "animations", item);
+                        ctx.Report.Add(ImportReport.Level.Approximated, $"Animation '{clipName}' is not in the export or does not fit this model's skeleton; its card does nothing", "animations", item);
                         continue;
                     }
                     clips.Add(bound);
@@ -397,38 +391,202 @@ namespace Zimension.Editor
             return true;
         }
 
+        /// <summary>
+        /// WorldItem.checkCustomSettings (as the native ProjectSource.applyCustomizations): the library
+        /// item's parameters (libraryItem.customSettings.parameters) applied to this item's meshes by node
+        /// name ("all" for every mesh) or material name (targetType "material"). The item's own value
+        /// (customSettings[name].value, or a variable's starting value) wins over the parameter default.
+        /// Customized meshes get their own material; SIZE_* and ROTATION_* adjust the mesh node in its
+        /// own axes, under the model hierarchy and the item transform.
+        /// </summary>
         static void ApplyCustomizations(ZimensionImporter.Context ctx, JsonNode item, GameObject instance)
         {
-            var custom = item.Obj("customSettings");
-            if (!custom.IsObject || custom.Count == 0) return;
-            foreach (var pair in custom.Members)
+            var parameters = item.Obj("libraryItem").Obj("customSettings")["parameters"];
+            if (!parameters.IsArray || parameters.Count == 0) return;
+            var customs = item.Obj("customSettings");
+            JsonNode ValueOf(JsonNode parameter)
             {
-                var type = pair.Value.Str("type");
-                var target = pair.Value.Str("targetMeshName");
-                var renderers = instance.GetComponentsInChildren<Renderer>(true).Where(r => string.IsNullOrEmpty(target) || r.name == target).ToList();
-                switch (type)
+                var value = parameter["default"];
+                var custom = customs.Obj(parameter.Str("name"));
+                if (custom.Has("value"))
                 {
-                    case "COLOR":
-                        foreach (var r in renderers)
+                    if (custom.Str("valueType") == "variable")
+                    {
+                        var variable = custom.Str("value");
+                        foreach (var v in ctx.World["variables"].Items)
+                            if (v.Str("name") == variable && v.Has("initialValue")) value = v["initialValue"];
+                    }
+                    else value = custom["value"];
+                }
+                return value;
+            }
+            string Text(JsonNode v) => v.IsString ? v.AsString : v.IsNumber ? EventValue.DisplayNumber(v.AsNumber) : "";
+            float Number(JsonNode v, float fallback)
+            {
+                if (v.IsNumber) return (float)v.AsNumber;
+                return v.IsString && float.TryParse(v.AsString, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var n) ? n : fallback;
+            }
+            Texture2D Texture(string url)
+            {
+                var entry = ctx.Resolver.Url(url);
+                var tex = entry != null ? AssetDatabase.LoadAssetAtPath<Texture2D>(ctx.AssetFor(entry)) : null;
+                if (!tex && !string.IsNullOrEmpty(url)) ctx.Report.Add(ImportReport.Level.Approximated, "A customization texture is missing from the export", "customSettings", item);
+                return tex;
+            }
+            var unsupported = new HashSet<string>();
+            int materialCount = 0;
+            foreach (var renderer in instance.GetComponentsInChildren<Renderer>(true))
+            {
+                var node = renderer.gameObject.name;
+                var materials = renderer.sharedMaterials;
+                bool changedAny = false;
+                var adjust = N.Matrix4x4.Identity; bool moved = false;
+                for (int slot = 0; slot < materials.Length; slot++)
+                {
+                    var original = materials[slot];
+                    if (!original) continue;
+                    var materialName = original.name.Replace(" (Instance)", "");
+                    Material copy = null;
+                    foreach (var parameter in parameters.Items)
+                    {
+                        if (!parameter.IsObject) continue;
+                        var names = new List<string>();
+                        var target = parameter["targetMeshName"];
+                        if (target.IsString) names.Add(target.AsString);
+                        else foreach (var n in target.Items) if (n.IsString) names.Add(n.AsString);
+                        bool materialTarget = parameter.Str("targetType") == "material";
+                        if (materialTarget ? !names.Contains(materialName) : !(names.Contains(node) || names.Contains("all"))) continue;
+                        var value = ValueOf(parameter);
+                        if (!value.Exists) continue;
+                        var type = parameter.Str("type");
+                        var text = Text(value);
+                        Material M() => copy ?? (copy = new Material(original) { name = original.name + " (Zimension)" });
+                        switch (type)
                         {
-                            var mats = r.sharedMaterials.Select(m => m ? new Material(m) : null).ToArray();
-                            foreach (var m in mats)
+                            case "COLOR": SetColor(M(), ParseColor(text, Color.white), keepAlpha: true); break;
+                            case "EMISSIVE_COLOR": SetEmission(M(), ParseColor(text, Color.black), null); break;
+                            case "EMISSIVE_INTENSITY": SetEmission(M(), null, Mathf.Max(0, Number(value, 1))); break;
+                            case "ROUGHNESS": SetFloat(M(), "roughnessFactor", "_Smoothness", Mathf.Clamp(Number(value, 0.5f), 0.05f, 1), invertForSmoothness: true); break;
+                            case "METALNESS": SetFloat(M(), "metallicFactor", "_Metallic", Mathf.Clamp01(Number(value, 0))); break;
+                            case "OPACITY":
                             {
-                                if (!m) continue;
-                                var c = ParseColor(pair.Value.Str("value"), Color.white);
-                                if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", c);
-                                if (m.HasProperty("baseColorFactor")) m.SetColor("baseColorFactor", c);
-                                if (m.HasProperty("_Color")) m.SetColor("_Color", c);
-                                AssetDatabase.CreateAsset(m, AssetDatabase.GenerateUniqueAssetPath($"{ctx.GeneratedFolder}/Materials/{ZimensionImporter.SafeName(item.Str("name"))}_{ZimensionImporter.SafeName(m.name)}.mat"));
+                                // Opacity makes the material transparent; 0 hides the mesh (an invisible box stays a collider).
+                                var m = M();
+                                var c = GetColor(m);
+                                c.a = Mathf.Clamp01(Number(value, 0));
+                                SetColor(m, c, keepAlpha: false);
+                                if (c.a < 1) MakeTransparent(m);
+                                break;
                             }
-                            r.sharedMaterials = mats;
+                            case "TEXTURE":
+                            case "IMAGE_TEXTURE":
+                            {
+                                var tex = Texture(text);
+                                if (tex) SetTexture(M(), "baseColorTexture", "_BaseMap", tex);
+                                break;
+                            }
+                            case "NORMAL_MAP_TEXTURE": { var tex = Texture(text); if (tex) SetTexture(M(), "normalTexture", "_BumpMap", tex); break; }
+                            case "ROUGHNESS_MAP_TEXTURE": { var tex = Texture(text); if (tex) SetTexture(M(), "metallicRoughnessTexture", "_MetallicGlossMap", tex); break; }
+                            case "IMAGE_EMISSIVE_TEXTURE":
+                            case "IMAGE_EMISSIVE_CONATAINED_TEXTURE":
+                            case "IMAGE_EMISSIVE_TRANSPARENT_TEXTURE":
+                            {
+                                // A glowing picture (screens, boards): the image as colour and emission.
+                                var tex = Texture(text);
+                                if (!tex) break;
+                                var m = M();
+                                SetTexture(m, "baseColorTexture", "_BaseMap", tex);
+                                SetTexture(m, "emissiveTexture", "_EmissionMap", tex);
+                                SetEmission(m, Color.white, 1);
+                                if (type == "IMAGE_EMISSIVE_TRANSPARENT_TEXTURE") MakeTransparent(m);
+                                break;
+                            }
+                            case "SIZE_X": case "SIZE_Y": case "SIZE_Z":
+                            {
+                                float f = Number(value, 100) / 100f;
+                                adjust = adjust * N.Matrix4x4.CreateScale(type == "SIZE_X" ? f : 1, type == "SIZE_Y" ? f : 1, type == "SIZE_Z" ? f : 1);
+                                moved = true;
+                                break;
+                            }
+                            case "ROTATION_X": case "ROTATION_Y": case "ROTATION_Z":
+                            {
+                                float a = Number(value, 0) * Mathf.Deg2Rad;
+                                adjust = adjust * (type == "ROTATION_X" ? N.Matrix4x4.CreateRotationX(a) : type == "ROTATION_Y" ? N.Matrix4x4.CreateRotationY(a) : N.Matrix4x4.CreateRotationZ(a));
+                                moved = true;
+                                break;
+                            }
+                            default: unsupported.Add(type); break;
                         }
-                        break;
-                    default:
-                        ctx.Report.Add(ImportReport.Level.Approximated, $"Material customization '{type}' is not applied", "customSettings", item);
-                        break;
+                    }
+                    if (copy)
+                    {
+                        AssetDatabase.CreateAsset(copy, AssetDatabase.GenerateUniqueAssetPath($"{ctx.GeneratedFolder}/Materials/{ZimensionImporter.SafeName(item.Str("name"))}_{ZimensionImporter.SafeName(materialName)}.mat"));
+                        materials[slot] = copy;
+                        changedAny = true;
+                        materialCount++;
+                    }
+                }
+                if (changedAny) renderer.sharedMaterials = materials;
+                if (moved)
+                {
+                    // In three space the adjustment applies first, in the mesh's own axes: local' = adjust * local
+                    // (row-vector). Mirrored into Unity space with the same basis change as everything else.
+                    var t = renderer.transform;
+                    var local = UnityMath.LocalMatrix(t);
+                    var unityAdjust = Coordinates.ThreeToUnity(adjust);
+                    UnityMath.ApplyLocal(t, unityAdjust * local);
                 }
             }
+            foreach (var type in unsupported)
+                ctx.Report.Add(ImportReport.Level.Approximated, $"Material customization '{type}' is not applied", "customSettings", item);
+        }
+
+        // glTFast materials (shader graph or built-in) use glTF property names; URP Lit and Standard use their own.
+        static Color GetColor(Material m)
+        {
+            if (m.HasProperty("baseColorFactor")) return m.GetColor("baseColorFactor");
+            if (m.HasProperty("_BaseColor")) return m.GetColor("_BaseColor");
+            return m.HasProperty("_Color") ? m.GetColor("_Color") : Color.white;
+        }
+
+        static void SetColor(Material m, Color c, bool keepAlpha)
+        {
+            if (keepAlpha) c.a = GetColor(m).a;
+            foreach (var p in new[] { "baseColorFactor", "_BaseColor", "_Color" }) if (m.HasProperty(p)) m.SetColor(p, c);
+        }
+
+        static void SetFloat(Material m, string gltf, string unity, float value, bool invertForSmoothness = false)
+        {
+            if (m.HasProperty(gltf)) m.SetFloat(gltf, value);
+            if (m.HasProperty(unity)) m.SetFloat(unity, invertForSmoothness ? 1 - value : value);
+        }
+
+        static void SetTexture(Material m, string gltf, string unity, Texture2D tex)
+        {
+            if (m.HasProperty(gltf)) m.SetTexture(gltf, tex);
+            if (m.HasProperty(unity)) m.SetTexture(unity, tex);
+            if (unity == "_BaseMap" && m.HasProperty("_MainTex")) m.SetTexture("_MainTex", tex);
+        }
+
+        static void SetEmission(Material m, Color? color, float? intensity)
+        {
+            var current = m.HasProperty("emissiveFactor") ? m.GetColor("emissiveFactor") : m.HasProperty("_EmissionColor") ? m.GetColor("_EmissionColor") : Color.black;
+            var c = color ?? current;
+            if (intensity.HasValue) c *= intensity.Value;
+            foreach (var p in new[] { "emissiveFactor", "_EmissionColor" }) if (m.HasProperty(p)) m.SetColor(p, c);
+            m.EnableKeyword("_EMISSION");
+        }
+
+        static void MakeTransparent(Material m)
+        {
+            // glTFast shader graphs and URP Lit both read _Surface / the transparent keyword.
+            if (m.HasProperty("_Surface")) m.SetFloat("_Surface", 1);
+            if (m.HasProperty("_SrcBlend")) m.SetFloat("_SrcBlend", (float)BlendMode.SrcAlpha);
+            if (m.HasProperty("_DstBlend")) m.SetFloat("_DstBlend", (float)BlendMode.OneMinusSrcAlpha);
+            if (m.HasProperty("_ZWrite")) m.SetFloat("_ZWrite", 0);
+            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.SetOverrideTag("RenderType", "Transparent");
+            m.renderQueue = (int)RenderQueue.Transparent;
         }
 
         static bool BuildPrimitive(ZimensionImporter.Context ctx, JsonNode item, ZimensionItem zi)

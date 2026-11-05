@@ -62,6 +62,8 @@ namespace Zimension.Editor
             public readonly Dictionary<string, string> Staged = new Dictionary<string, string>(StringComparer.Ordinal);   // bundle entry -> asset path
             public readonly Dictionary<string, List<AnimationClip>> ModelClips = new Dictionary<string, List<AnimationClip>>(StringComparer.Ordinal); // asset path -> clips in glTF order
             public readonly Dictionary<string, AnimationClip> LibraryByName = new Dictionary<string, AnimationClip>(StringComparer.Ordinal);
+            /// <summary>Every clip of every imported model and library (several libraries share clip names such as "Idle").</summary>
+            public readonly List<AnimationClip> LibraryClips = new List<AnimationClip>();
             public readonly Dictionary<string, List<AnimationClip>> SourceClips = new Dictionary<string, List<AnimationClip>>(StringComparer.Ordinal); // bundle entry -> clips by index
             public readonly Dictionary<string, string> Retargeted = new Dictionary<string, string>(StringComparer.Ordinal);
             public ZimensionProject Project;
@@ -295,7 +297,7 @@ namespace Zimension.Editor
                 return;
             }
             if (!ImageExtensions.Contains(ext)) return;
-            Stage(ctx, entry, "UI", role, null, owner);
+            Stage(ctx, entry, role == "texture" || role == "environment" ? "Textures" : "UI", role, null, owner);
         }
 
         static void StageAssets(Context ctx)
@@ -317,6 +319,14 @@ namespace Zimension.Editor
                 foreach (var source in item["characterAnimationSources"].Items) StageAnimationSource(ctx, source, item);
                 var primitive = item.Obj("primitiveSettings");
                 if (primitive.IsObject && !string.IsNullOrEmpty(primitive.Str("textureUrl"))) StageImage(ctx, primitive.Str("textureUrl"), "texture", item);
+                // Customization textures (library parameters with the item's own values or their defaults).
+                foreach (var parameter in item.Obj("libraryItem").Obj("customSettings")["parameters"].Items)
+                {
+                    if (!parameter.Str("type").Contains("TEXTURE")) continue;
+                    var custom = item.Obj("customSettings").Obj(parameter.Str("name"));
+                    var url = custom.Has("value") && custom.Str("valueType") != "variable" ? custom.Str("value") : parameter.Str("default");
+                    if (!string.IsNullOrEmpty(url)) StageImage(ctx, url, "texture", item);
+                }
             }
             foreach (var sound in world["sounds"].Items) StageSound(ctx, sound, null);
             // Player characters.
@@ -424,7 +434,11 @@ namespace Zimension.Editor
                 ctx.ModelClips[path] = ordered;
                 ctx.SourceClips[pair.Key] = ordered;
                 foreach (var clip in ordered)
-                    if (clip && !ctx.LibraryByName.ContainsKey(clip.name)) ctx.LibraryByName[clip.name] = clip;
+                {
+                    if (!clip) continue;
+                    if (!ctx.LibraryByName.ContainsKey(clip.name)) ctx.LibraryByName[clip.name] = clip;
+                    ctx.LibraryClips.Add(clip);
+                }
             }
         }
 
@@ -503,31 +517,77 @@ namespace Zimension.Editor
             var sourceClips = SourceClipsByName(ctx, character["characterAnimationSources"]);
             AnimationClip Resolve(string action, params string[] fallbacks)
             {
+                // Avatar.getCharacterAnimationName: the creator's map first, then the standard action names.
                 var names = new List<string>();
                 var mapped = map.Str(action);
                 if (!string.IsNullOrEmpty(mapped)) names.Add(mapped);
                 names.Add(action);
                 names.AddRange(fallbacks);
-                foreach (var name in names)
+                var clip = FindBestClip(ctx, names, prefab.transform, own, sourceClips, "Player");
+                if (!clip)
+                    ctx.Report.Add(ImportReport.Level.Approximated, $"Player '{action}' animation is not available for the character; the avatar stays posed for it", "avatar.character.characterAnimationMap");
+                return clip;
+            }
+            // Avatar.js BASE_ACTIONS / getCharacterAnimationName codes.
+            project.idleClip = Resolve("Idle", "Breathing Idle", "Standing Idle", "idle");
+            project.walkClip = Resolve("Walk", "Walking", "walk_forward");
+            project.runClip = Resolve("Run", "Running", "running_forward");
+            project.jumpClip = Resolve("Jump_forward", "Jump", "Jumping", "jump_normal");
+        }
+
+        /// <summary>Avatar.normalizeAnimationName: lowercase letters and digits only.</summary>
+        internal static string NormalizeClipName(string name)
+        {
+            var sb = new StringBuilder();
+            foreach (var c in name ?? "") if (char.IsLetterOrDigit(c)) sb.Append(char.ToLowerInvariant(c));
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// The clip for the first name (in preference order) that this model can play: its own clips,
+        /// then its character animation sources, then every imported library. Libraries share names
+        /// ("Idle" exists for Ready Player Me, Ultron, Zimension and Mixamo rigs), so among same-named
+        /// clips the one whose bones fit this skeleton best wins (Engine.checkCharacterAnimations picks
+        /// the library by rig type; fit by bone paths reaches the same choice without the heuristics).
+        /// </summary>
+        internal static AnimationClip FindBestClip(Context ctx, List<string> names, Transform modelRoot,
+            List<AnimationClip> own, Dictionary<string, AnimationClip> sources, string owner)
+        {
+            foreach (var name in names)
+            {
+                var key = NormalizeClipName(name);
+                if (key.Length == 0) continue;
+                var mine = own.FirstOrDefault(c => c && (c.name == name || NormalizeClipName(c.name) == key));
+                if (mine) return mine;
+                if (sources != null)
                 {
-                    var clip = own.FirstOrDefault(c => c && string.Equals(c.name, name, StringComparison.OrdinalIgnoreCase));
-                    if (clip) return clip;
+                    AnimationClip fromSource = null;
+                    if (!sources.TryGetValue(name, out fromSource))
+                        foreach (var pair in sources) if (NormalizeClipName(pair.Key) == key) { fromSource = pair.Value; break; }
+                    if (fromSource)
+                    {
+                        var bound = BindClip(ctx, fromSource, modelRoot, owner);
+                        if (bound) return bound;
+                    }
                 }
-                foreach (var name in names)
+                AnimationClip best = null; float bestDirect = -1, bestNamed = -1;
+                foreach (var clip in ctx.LibraryClips)
                 {
-                    if (!sourceClips.TryGetValue(name, out var clip) && !ctx.LibraryByName.TryGetValue(name, out clip))
-                        clip = ctx.LibraryByName.Values.FirstOrDefault(c => string.Equals(c.name, name, StringComparison.OrdinalIgnoreCase));
-                    if (!clip) continue;
-                    var bound = BindClip(ctx, clip, prefab.transform, "Player");
+                    if (!clip || (clip.name != name && NormalizeClipName(clip.name) != key)) continue;
+                    float direct = ClipRetarget.DirectCoverage(clip, modelRoot);
+                    float named = direct >= 0.999f ? 1 : ClipRetarget.NameCoverage(clip, modelRoot);
+                    if (direct > bestDirect + 1e-4f || (Mathf.Abs(direct - bestDirect) <= 1e-4f && named > bestNamed))
+                    {
+                        best = clip; bestDirect = direct; bestNamed = named;
+                    }
+                }
+                if (best && bestNamed >= 0.5f)
+                {
+                    var bound = BindClip(ctx, best, modelRoot, owner);
                     if (bound) return bound;
                 }
-                ctx.Report.Add(ImportReport.Level.Approximated, $"Player '{action}' animation is not available for the character; the avatar stays posed for it", "avatar.character.characterAnimationMap");
-                return null;
             }
-            project.idleClip = Resolve("Idle", "idle", "Breathing Idle", "Standing Idle");
-            project.walkClip = Resolve("Walk", "walk", "Walking");
-            project.runClip = Resolve("Run", "run", "Running");
-            project.jumpClip = Resolve("Jump", "jump", "Jumping");
+            return null;
         }
 
         /// <summary>A clip bound to a model hierarchy, saved as a generated .anim when it had to be remapped.</summary>

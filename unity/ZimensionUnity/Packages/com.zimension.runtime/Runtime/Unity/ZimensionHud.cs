@@ -46,18 +46,88 @@ namespace Zimension.Unity
         readonly Dictionary<string, Texture2D> m_Images = new Dictionary<string, Texture2D>();
         string m_Prompt = "";
         bool m_Pickup;
-        string m_PromptTemplate = "Press F to {action}", m_PickupTemplate = "Press F to pick up {action}";
-        readonly List<(string text, float until)> m_Messages = new List<(string, float)>();
+        string m_Message = "";
+        float m_MessageUntil;
         float m_Fade, m_FadeTarget, m_FadeSpeed = 4;
+        float m_RevealStarted = -1;
         string m_Screen = ""; // "", "start", "pause", "dead", "win"
         bool m_ShowHealth;
         float m_Health = 100, m_MaxHealth = 100;
         Vector3? m_Waypoint;
         bool m_ShowDiagnostics;
-        GUIStyle m_Text, m_Center, m_Big, m_Box;
         Texture2D m_White;
-        string m_Title = "", m_StartLabel = "Start", m_DeadText = "You died", m_WinText = "You win!";
+        Font m_Regular, m_Medium, m_Bold;
+        string m_Title = "";
         Texture2D m_Loading, m_Logo;
+        readonly Dictionary<string, GUIStyle> m_Styles = new Dictionary<string, GUIStyle>();
+
+        /// <summary>One default UI element as defaultUISettings.js defines it (normalizeDefaultUISettings).</summary>
+        sealed class UiElement
+        {
+            public bool Enabled = true;
+            public string Text = "";
+            public Dictionary<string, string> Labels = new Dictionary<string, string>();
+            public Color Color = Color.white, Background, Border, Accent, Hover;
+            public Color Screen = Color.black;
+            public float BorderWidth, BorderRadius, Opacity = 1, FontSize = 14, PaddingX, PaddingY, MinWidth, Top, Bottom, ScreenOpacity = 1;
+            public int FontWeight = 500;
+            public string Label(string key, string fallback) => Labels.TryGetValue(key, out var v) && !string.IsNullOrEmpty(v) ? v : fallback;
+        }
+
+        // DEFAULT_UI_ELEMENT_DEFINITIONS (as the native player's defaultUiDefinitions).
+        UiElement m_WorldMessage, m_InteractionPrompt, m_PickupPrompt, m_StartButton, m_PauseMenu, m_DeadScreen;
+
+        static UiElement Prompt() => new UiElement
+        {
+            Color = Color.white, Background = new Color(52 / 255f, 52 / 255f, 52 / 255f, 0.8f), Border = Color.white,
+            BorderRadius = 4, FontSize = 14, FontWeight = 500, PaddingX = 10, PaddingY = 7, Top = 50,
+        };
+
+        void Defaults()
+        {
+            m_WorldMessage = new UiElement
+            {
+                Text = "Quest updated", Color = Color.white, Background = CssStyle.ParseColor("#333333", Color.black), Border = CssStyle.ParseColor("#948d8d", Color.gray),
+                BorderWidth = 1, BorderRadius = 5, Opacity = 0.8f, FontSize = 20, FontWeight = 500, PaddingX = 15, PaddingY = 10, Bottom = 20,
+            };
+            m_InteractionPrompt = Prompt(); m_InteractionPrompt.Text = "To {action}";
+            m_PickupPrompt = Prompt(); m_PickupPrompt.Text = "To Pick {action}";
+            m_StartButton = new UiElement
+            {
+                Text = "Play", Color = Color.white, Background = CssStyle.ParseColor("#ed0100", Color.red), Border = CssStyle.ParseColor("#ed0100", Color.red),
+                BorderRadius = 30, FontSize = 14, FontWeight = 700, PaddingX = 18, PaddingY = 9, MinWidth = 120,
+            };
+            m_PauseMenu = new UiElement
+            {
+                Text = "{world}", Color = CssStyle.ParseColor("#f6f6f8", Color.white), Background = CssStyle.ParseColor("rgba(16, 16, 19, 0.94)", Color.black),
+                Border = CssStyle.ParseColor("rgba(255, 255, 255, 0.08)", Color.gray), BorderWidth = 1, BorderRadius = 20, FontSize = 14, FontWeight = 600,
+                PaddingX = 16, PaddingY = 16, MinWidth = 270, Accent = CssStyle.ParseColor("#dc2a26", Color.red), Hover = CssStyle.ParseColor("rgba(255, 255, 255, 0.07)", Color.gray),
+            };
+            m_PauseMenu.Labels["eyebrow"] = "Paused"; m_PauseMenu.Labels["resume"] = "Resume"; m_PauseMenu.Labels["restart"] = "Restart";
+            m_DeadScreen = new UiElement { Text = "YOU ARE DEAD", Color = Color.red, Border = Color.white, FontSize = 50, FontWeight = 600, Screen = Color.black };
+        }
+
+        /// <summary>world.defaultUISettings over the definitions (parseDefaultUi: allowDisable, font and box limits).</summary>
+        static void Merge(UiElement target, JsonNode source, bool allowDisable, float maxFont, bool backdrop, bool menu)
+        {
+            if (!source.IsObject) return;
+            var style = source.Obj("style");
+            if (allowDisable) target.Enabled = !(source["enabled"].IsBool && !source["enabled"].AsBool);
+            var text = source.Str("text");
+            if (!string.IsNullOrEmpty(text)) target.Text = text;
+            foreach (var pair in source.Obj("labels").Members) if (pair.Value.IsString && pair.Value.AsString.Length > 0) target.Labels[pair.Key] = pair.Value.AsString;
+            Color C(string key, Color fallback) => style[key].IsString ? CssStyle.ParseColor(style[key].AsString, fallback) : fallback;
+            float F(string key, float fallback, float min, float max) => Mathf.Clamp(style.Float(key, fallback), min, max);
+            target.Color = C("color", target.Color); target.Background = C("backgroundColor", target.Background); target.Border = C("borderColor", target.Border);
+            target.BorderWidth = F("borderWidth", target.BorderWidth, 0, 12); target.BorderRadius = F("borderRadius", target.BorderRadius, 0, 80);
+            target.Opacity = F("opacity", target.Opacity, 0, 1);
+            target.FontSize = F("fontSize", target.FontSize, 8, maxFont); target.FontWeight = (int)F("fontWeight", target.FontWeight, 100, 900);
+            target.PaddingX = F("paddingX", target.PaddingX, 0, 80); target.PaddingY = F("paddingY", target.PaddingY, 0, 80);
+            target.MinWidth = F("minWidth", target.MinWidth, 0, 720);
+            target.Top = F("top", target.Top, 0, 100); target.Bottom = F("bottom", target.Bottom, 0, 240);
+            if (menu) { target.Accent = C("accentColor", target.Accent); target.Hover = C("hoverColor", target.Hover); }
+            if (backdrop) { target.Screen = C("screenColor", target.Screen); target.ScreenOpacity = F("screenOpacity", target.ScreenOpacity, 0, 1); }
+        }
 
         public bool BlocksInput => m_Screen.Length > 0 || PausingOverlay;
         public bool PausingOverlay { get { foreach (var o in m_Overlays) if (o.Visible && o.PauseGame) return true; return false; } }
@@ -72,18 +142,13 @@ namespace Zimension.Unity
             m_Logo = project ? project.logoImage : null;
             if (images != null) foreach (var pair in images) if (pair.Value) m_Images[pair.Key] = pair.Value;
             var ui = worldJson.Obj("defaultUISettings");
-            string Label(string element, string key, string fallback)
-            {
-                var e = ui.Obj(element);
-                var text = e.Str("text");
-                if (!string.IsNullOrEmpty(text)) return text;
-                var labels = e.Obj("labels");
-                return labels.Str(key, fallback);
-            }
-            m_PromptTemplate = Label("interactionPrompt", "text", m_PromptTemplate);
-            m_PickupTemplate = Label("pickupPrompt", "text", m_PickupTemplate);
-            m_StartLabel = Label("startButton", "text", m_StartLabel);
-            m_DeadText = Label("deadScreen", "title", m_DeadText);
+            Defaults();
+            Merge(m_WorldMessage, ui.Obj("worldMessage"), true, 64, false, false);
+            Merge(m_InteractionPrompt, ui.Obj("interactionPrompt"), true, 64, false, false);
+            Merge(m_PickupPrompt, ui.Obj("pickupPrompt"), true, 64, false, false);
+            Merge(m_StartButton, ui.Obj("startButton"), false, 64, false, false);
+            Merge(m_PauseMenu, ui.Obj("pauseMenu"), false, 64, false, true);
+            Merge(m_DeadScreen, ui.Obj("deadScreen"), false, 160, true, false);
             m_Hud.Clear(); m_Overlays.Clear();
             foreach (var e in worldJson.Obj("customHUDUI")["elements"].Items) if (e.IsObject) m_Hud.Add(ParseElement(e));
             foreach (var o in worldJson["customUIOverRelays"].Items)
@@ -136,11 +201,11 @@ namespace Zimension.Unity
 
         public void SetPrompt(string text, bool pickup) { m_Prompt = text ?? ""; m_Pickup = pickup; }
 
+        /// <summary>World message: one at a time, bottom centre, for four seconds.</summary>
         public void ShowMessage(string text, float seconds = 4f)
         {
-            if (string.IsNullOrEmpty(text)) { m_Messages.Clear(); return; }
-            m_Messages.Add((text, Time.unscaledTime + seconds));
-            if (m_Messages.Count > 4) m_Messages.RemoveAt(0);
+            m_Message = text ?? "";
+            m_MessageUntil = Time.unscaledTime + seconds;
         }
 
         public void SetVariable(string name, string value) => m_Variables[name] = value;
@@ -157,7 +222,12 @@ namespace Zimension.Unity
         public void FadeIn(float seconds) { m_FadeTarget = 0; m_FadeSpeed = seconds > 0 ? 1 / seconds : 100; }
         public float FadeAmount => m_Fade;
 
-        public void ShowScreen(string screen) => m_Screen = screen ?? "";
+        public void ShowScreen(string screen)
+        {
+            // Leaving the start screen: the world fades in from black (held 0.3 s, then 0.7 s ease-out).
+            if (m_Screen == "start" && string.IsNullOrEmpty(screen)) m_RevealStarted = Time.unscaledTime;
+            m_Screen = screen ?? "";
+        }
 
         /// <summary>A world event reached the dispatcher: custom HUD show/hide and overlays.</summary>
         public void OnWorldEvent(string name)
@@ -179,7 +249,6 @@ namespace Zimension.Unity
         void Update()
         {
             m_Fade = Mathf.MoveTowards(m_Fade, m_FadeTarget, m_FadeSpeed * Time.unscaledDeltaTime);
-            m_Messages.RemoveAll(m => m.until < Time.unscaledTime);
             if (ZimensionInput.KeyDown(KeyCode.F3)) m_ShowDiagnostics = !m_ShowDiagnostics;
         }
 
@@ -187,111 +256,208 @@ namespace Zimension.Unity
 
         void Styles()
         {
-            if (m_Text != null) return;
+            if (m_White) return;
             m_White = Texture2D.whiteTexture;
-            m_Text = new GUIStyle(GUI.skin.label) { fontSize = 16, wordWrap = true, richText = false };
-            m_Text.normal.textColor = Color.white;
-            m_Center = new GUIStyle(m_Text) { alignment = TextAnchor.MiddleCenter };
-            m_Big = new GUIStyle(m_Center) { fontSize = 36, fontStyle = FontStyle.Bold };
-            m_Box = new GUIStyle(GUI.skin.box) { fontSize = 16, alignment = TextAnchor.MiddleCenter, wordWrap = true };
-            m_Box.normal.textColor = Color.white;
+            m_Regular = Resources.Load<Font>("ZimensionFonts/Ubuntu-Regular");
+            m_Medium = Resources.Load<Font>("ZimensionFonts/Ubuntu-Medium");
+            m_Bold = Resources.Load<Font>("ZimensionFonts/Ubuntu-Bold");
         }
 
-        void Fill(Rect r, Color c)
+        /// <summary>A label style for the Zimension UI font (Ubuntu) at a size, weight and colour.</summary>
+        GUIStyle Text(float size, int weight, Color color, TextAnchor anchor = TextAnchor.MiddleLeft, bool wrap = false)
         {
-            var previous = GUI.color;
-            GUI.color = c;
-            GUI.DrawTexture(r, m_White);
-            GUI.color = previous;
+            var key = $"{size:0.#}|{weight}|{ColorUtility.ToHtmlStringRGBA(color)}|{anchor}|{wrap}";
+            if (m_Styles.TryGetValue(key, out var cached)) return cached;
+            var style = new GUIStyle(GUI.skin.label)
+            {
+                font = weight >= 700 ? (m_Bold ?? m_Medium) : weight >= 500 ? (m_Medium ?? m_Regular) : m_Regular,
+                fontSize = Mathf.RoundToInt(size), alignment = anchor, wordWrap = wrap, richText = false,
+                fontStyle = !m_Bold && weight >= 600 ? FontStyle.Bold : FontStyle.Normal,
+                padding = new RectOffset(0, 0, 0, 0), margin = new RectOffset(0, 0, 0, 0),
+            };
+            style.normal.textColor = color;
+            m_Styles[key] = style;
+            return style;
         }
+
+        void Fill(Rect r, Color c) => Box(r, c, 0, Color.clear, 0);
+
+        /// <summary>A rounded box with an optional border (CSS background, border, border-radius).</summary>
+        void Box(Rect r, Color background, float radius, Color border, float borderWidth)
+        {
+            if (background.a > 0) GUI.DrawTexture(r, m_White, ScaleMode.StretchToFill, true, 0, background, 0, radius);
+            if (borderWidth > 0 && border.a > 0) GUI.DrawTexture(r, m_White, ScaleMode.StretchToFill, true, 0, border, borderWidth, radius);
+        }
+
+        static Color WithOpacity(Color c, float opacity) => new Color(c.r, c.g, c.b, c.a * opacity);
+
+        string Format(string text, string action) => (text ?? "").Replace("{action}", action ?? "").Replace("{world}", m_Title).Replace("{mode}", "");
 
         void OnGUI()
         {
             Styles();
             float w = Screen.width, h = Screen.height;
             DrawCustomHud(w, h);
-            DrawWaypoint();
-            // Messages, top centre.
-            float y = 24;
-            foreach (var (text, _) in m_Messages)
+            DrawWaypoint(w, h);
+            if (m_Screen.Length == 0)
             {
-                var size = m_Box.CalcSize(new GUIContent(text));
-                float width = Mathf.Min(w * 0.8f, Mathf.Max(240, size.x + 32));
-                float height = m_Box.CalcHeight(new GUIContent(text), width) + 16;
-                var r = new Rect((w - width) / 2, y, width, height);
-                Fill(r, new Color(0, 0, 0, 0.65f));
-                GUI.Label(r, text, m_Center);
-                y += height + 8;
-            }
-            // Prompt, lower centre.
-            if (m_Prompt.Length > 0 && m_Screen.Length == 0)
-            {
-                var template = m_Pickup ? m_PickupTemplate : m_PromptTemplate;
-                var text = template.Contains("{action}") ? template.Replace("{action}", m_Prompt).Replace("{world}", m_Title) : $"{template} {m_Prompt}";
-                var r = new Rect((w - 420) / 2, h * 0.72f, 420, 44);
-                Fill(r, new Color(0, 0, 0, 0.6f));
-                GUI.Label(r, text, m_Center);
-            }
-            if (m_ShowHealth)
-            {
-                var r = new Rect(24, h - 44, 240, 18);
-                Fill(r, new Color(0, 0, 0, 0.55f));
-                Fill(new Rect(r.x + 2, r.y + 2, (r.width - 4) * Mathf.Clamp01(m_Health / m_MaxHealth), r.height - 4), new Color(0.86f, 0.16f, 0.15f, 0.95f));
-                GUI.Label(new Rect(r.x, r.y - 22, 240, 20), $"Health {Mathf.CeilToInt(m_Health)}", m_Text);
+                if (m_Prompt.Length > 0) PromptBox(m_Pickup ? m_PickupPrompt : m_InteractionPrompt, m_Prompt, w, h);
+                if (m_Message.Length > 0 && Time.unscaledTime < m_MessageUntil && m_WorldMessage.Enabled) MessageBox(w, h);
+                if (m_ShowHealth) HealthBar(w, h);
             }
             DrawOverlays(w, h);
             if (m_Fade > 0.001f) Fill(new Rect(0, 0, w, h), new Color(0, 0, 0, m_Fade));
+            if (m_RevealStarted >= 0)
+            {
+                float t = Mathf.Clamp01((Time.unscaledTime - m_RevealStarted - 0.3f) / 0.7f);
+                float alpha = 1 - (1 - (1 - t) * (1 - t));
+                if (alpha > 0.001f) Fill(new Rect(0, 0, w, h), new Color(0, 0, 0, alpha)); else m_RevealStarted = -1;
+            }
             DrawScreens(w, h);
             if (m_ShowDiagnostics && m_World) DrawDiagnostics(w, h);
-            else if (m_Screen.Length == 0 && m_World && m_World.Player && !m_World.Player.CursorLocked && !PausingOverlay)
-                GUI.Label(new Rect(0, h - 28, w, 24), "Click to look around - Esc releases the mouse - F3 diagnostics", m_Center);
+        }
+
+        /// <summary>Interaction / pickup prompt: an "F" key cap and "To {action}", centred at its top %.</summary>
+        void PromptBox(UiElement e, string action, float w, float h)
+        {
+            if (!e.Enabled) return;
+            var style = Text(e.FontSize, e.FontWeight, WithOpacity(e.Color, e.Opacity));
+            var content = new GUIContent(Format(e.Text, action));
+            var size = style.CalcSize(content);
+            const float key = 20, gap = 10;
+            float bw = e.PaddingX * 2 + key + gap + size.x, bh = e.PaddingY * 2 + Mathf.Max(key, size.y);
+            var box = new Rect((w - bw) / 2, h * e.Top / 100, bw, bh);
+            Box(box, WithOpacity(e.Background, e.Opacity), e.BorderRadius, WithOpacity(e.Border, e.Opacity), e.BorderWidth);
+            var cap = new Rect(box.x + e.PaddingX, box.y + (bh - key) / 2, key, key);
+            Box(cap, Color.clear, 2, WithOpacity(CssStyle.ParseColor("#f1f1f2", Color.white), e.Opacity), 1);
+            GUI.Label(cap, "F", Text(16, 500, WithOpacity(e.Color, e.Opacity), TextAnchor.MiddleCenter));
+            GUI.Label(new Rect(cap.xMax + gap, box.y, size.x + 2, bh), content, style);
+        }
+
+        /// <summary>World message: bottom centre, at most 80% wide.</summary>
+        void MessageBox(float w, float h)
+        {
+            var e = m_WorldMessage;
+            var style = Text(e.FontSize, e.FontWeight, WithOpacity(e.Color, e.Opacity), TextAnchor.UpperCenter, wrap: true);
+            var content = new GUIContent(m_Message);
+            float maxText = w * 0.8f - e.PaddingX * 2;
+            var natural = style.CalcSize(content);
+            float textWidth = Mathf.Min(natural.x + 2, maxText);
+            float textHeight = style.CalcHeight(content, textWidth);
+            float bw = Mathf.Max(textWidth + e.PaddingX * 2, e.MinWidth), bh = textHeight + e.PaddingY * 2;
+            var box = new Rect((w - bw) / 2, h - e.Bottom - bh, bw, bh);
+            Box(box, WithOpacity(e.Background, e.Opacity), e.BorderRadius, WithOpacity(e.Border, e.Opacity), e.BorderWidth);
+            GUI.Label(new Rect((w - textWidth) / 2, box.y + e.PaddingY, textWidth, textHeight), content, style);
+        }
+
+        void HealthBar(float w, float h)
+        {
+            var r = new Rect(24, h - 40, 220, 14);
+            Box(r, new Color(0, 0, 0, 0.55f), 7, Color.clear, 0);
+            float f = Mathf.Clamp01(m_Health / m_MaxHealth);
+            if (f > 0) Box(new Rect(r.x + 2, r.y + 2, (r.width - 4) * f, r.height - 4), CssStyle.ParseColor("#dc2a26", Color.red), 5, Color.clear, 0);
+            GUI.Label(new Rect(r.x, r.y - 22, 220, 20), $"{Mathf.CeilToInt(m_Health)}", Text(14, 700, Color.white));
+        }
+
+        bool PillButton(Rect r, string label, UiElement e, bool primary = true)
+        {
+            bool hover = r.Contains(Event.current.mousePosition);
+            var bg = primary ? e.Background : (hover ? e.Hover : new Color(1, 1, 1, 0.04f));
+            if (primary && hover) bg = Color.Lerp(bg, Color.white, 0.12f);
+            Box(r, bg, e.BorderRadius, e.Border, e.BorderWidth);
+            GUI.Label(r, label, Text(e.FontSize, e.FontWeight, e.Color, TextAnchor.MiddleCenter));
+            return GUI.Button(r, GUIContent.none, GUIStyle.none);
+        }
+
+        Rect ButtonRect(UiElement e, string label, float cx, float y)
+        {
+            var size = Text(e.FontSize, e.FontWeight, e.Color).CalcSize(new GUIContent(label));
+            float bw = Mathf.Max(e.MinWidth, size.x + e.PaddingX * 2), bh = size.y + e.PaddingY * 2;
+            return new Rect(cx - bw / 2, y, bw, bh);
         }
 
         void DrawScreens(float w, float h)
         {
             if (m_Screen.Length == 0) return;
-            Fill(new Rect(0, 0, w, h), new Color(0, 0, 0, m_Screen == "pause" ? 0.6f : 0.8f));
-            if (m_Screen == "start" && m_Loading) GUI.DrawTexture(new Rect(0, 0, w, h), m_Loading, ScaleMode.ScaleAndCrop);
-            if (m_Screen == "start" && m_Logo) GUI.DrawTexture(new Rect((w - 160) / 2, h * 0.18f, 160, 160), m_Logo, ScaleMode.ScaleToFit);
-            string title = m_Screen == "dead" ? m_DeadText : m_Screen == "win" ? m_WinText : m_Screen == "pause" ? "Paused" : m_Title;
-            GUI.Label(new Rect(0, h * 0.38f, w, 60), title, m_Big);
-            var button = new Rect((w - 220) / 2, h * 0.52f, 220, 48);
             switch (m_Screen)
             {
                 case "start":
-                    if (GUI.Button(button, m_StartLabel)) m_World.BeginPlay();
+                {
+                    Fill(new Rect(0, 0, w, h), Color.black);
+                    if (m_Loading) GUI.DrawTexture(new Rect(0, 0, w, h), m_Loading, ScaleMode.ScaleAndCrop);
+                    if (m_Logo) GUI.DrawTexture(new Rect((w - 160) / 2, h * 0.2f, 160, 160), m_Logo, ScaleMode.ScaleToFit);
+                    GUI.Label(new Rect(0, h * 0.45f, w, 48), m_Title, Text(32, 700, Color.white, TextAnchor.MiddleCenter));
+                    var label = Format(m_StartButton.Text, "");
+                    if (PillButton(ButtonRect(m_StartButton, label, w / 2, h * 0.56f), label, m_StartButton)) m_World.BeginPlay();
                     break;
+                }
                 case "pause":
-                    if (GUI.Button(button, "Resume")) m_World.SetPaused(false);
-                    if (GUI.Button(new Rect(button.x, button.y + 60, 220, 40), "Restart")) { m_World.SetPaused(false); m_World.ResetWorld(); }
+                {
+                    var e = m_PauseMenu;
+                    Fill(new Rect(0, 0, w, h), new Color(0, 0, 0, 0.45f));
+                    float pw = Mathf.Max(e.MinWidth, 300), ph = 230;
+                    var panel = new Rect((w - pw) / 2, (h - ph) / 2, pw, ph);
+                    Box(panel, e.Background, e.BorderRadius, e.Border, e.BorderWidth);
+                    GUI.Label(new Rect(panel.x + e.PaddingX, panel.y + e.PaddingY, pw - e.PaddingX * 2, 18), e.Label("eyebrow", "Paused").ToUpperInvariant(), Text(11, 600, e.Accent));
+                    GUI.Label(new Rect(panel.x + e.PaddingX, panel.y + e.PaddingY + 20, pw - e.PaddingX * 2, 30), Format(e.Text, ""), Text(20, 700, e.Color));
+                    var resume = new Rect(panel.x + e.PaddingX, panel.y + 90, pw - e.PaddingX * 2, 44);
+                    var restart = new Rect(resume.x, resume.yMax + 10, resume.width, 44);
+                    var primary = new UiElement { Background = e.Accent, Border = Color.clear, BorderRadius = 12, FontSize = e.FontSize, FontWeight = e.FontWeight, Color = Color.white };
+                    var secondary = new UiElement { Hover = e.Hover, Border = e.Border, BorderWidth = 1, BorderRadius = 12, FontSize = e.FontSize, FontWeight = e.FontWeight, Color = e.Color };
+                    if (PillButton(resume, e.Label("resume", "Resume"), primary)) m_World.SetPaused(false);
+                    if (PillButton(restart, e.Label("restart", "Restart"), secondary, primary: false)) { m_World.SetPaused(false); m_World.ResetWorld(); }
                     break;
+                }
                 case "dead":
-                    if (GUI.Button(button, "Respawn")) m_World.RespawnAfterDeath();
+                {
+                    var e = m_DeadScreen;
+                    Fill(new Rect(0, 0, w, h), WithOpacity(e.Screen, e.ScreenOpacity * 0.85f));
+                    GUI.Label(new Rect(0, h * 0.38f, w, e.FontSize * 1.4f), Format(e.Text, ""), Text(e.FontSize, e.FontWeight, e.Color, TextAnchor.MiddleCenter));
+                    var label = e.Label("respawn", "Respawn");
+                    if (PillButton(ButtonRect(m_StartButton, label, w / 2, h * 0.56f), label, m_StartButton)) m_World.RespawnAfterDeath();
                     break;
+                }
                 case "win":
-                    if (GUI.Button(button, "Play again")) { m_Screen = ""; m_World.ResetWorld(); }
+                {
+                    Fill(new Rect(0, 0, w, h), new Color(0, 0, 0, 0.75f));
+                    GUI.Label(new Rect(0, h * 0.38f, w, 70), "YOU WIN", Text(50, 700, CssStyle.ParseColor("#ffe45d", Color.yellow), TextAnchor.MiddleCenter));
+                    const string label = "Play again";
+                    if (PillButton(ButtonRect(m_StartButton, label, w / 2, h * 0.56f), label, m_StartButton)) { m_Screen = ""; m_World.ResetWorld(); }
                     break;
+                }
             }
         }
 
-        void DrawWaypoint()
+        /// <summary>
+        /// Engine.updateWaypoint: the item centre on screen, a 30 px box offset by -15 and clamped to the
+        /// window (behind the camera it parks at the right/bottom edge); drawn as .way-point-border, a
+        /// 5 px #ffff5b border turned 45 degrees round a 20 px fill.
+        /// </summary>
+        void DrawWaypoint(float w, float h)
         {
-            if (!m_Waypoint.HasValue || !m_World || !m_World.Player || !m_World.Player.PlayerCamera) return;
-            var cam = m_World.Player.PlayerCamera;
-            var p = cam.WorldToScreenPoint(m_Waypoint.Value + Vector3.up * 0.5f);
-            if (p.z < 0) return;
-            var r = new Rect(p.x - 10, Screen.height - p.y - 10, 20, 20);
-            Fill(r, new Color(1f, 0.8f, 0.1f, 0.9f));
-            float metres = Vector3.Distance(m_World.Player.Feet, m_Waypoint.Value);
-            GUI.Label(new Rect(p.x - 40, Screen.height - p.y + 12, 80, 20), $"{metres:0} m", m_Center);
+            if (!m_Waypoint.HasValue || !m_World) return;
+            var cam = m_World.Player ? m_World.Player.PlayerCamera : Camera.main;
+            if (!cam) return;
+            var p = cam.WorldToScreenPoint(m_Waypoint.Value);
+            float x = 5000, y = 5000;
+            if (p.z > 0) { x = p.x; y = h - p.y; }
+            float left = Mathf.Max(0, x - 15), top = Mathf.Max(0, y - 15);
+            if (left > w) left = w - 30;
+            if (top > h) top = h - 30;
+            var centre = new Vector2(left + 20, top + 20);
+            var yellow = new Color(1, 1, 0x5b / 255f, 1);
+            var matrix = GUI.matrix;
+            GUIUtility.RotateAroundPivot(45, centre);
+            Box(new Rect(centre.x - 20, centre.y - 20, 40, 40), Color.clear, 0, yellow, 5);
+            Fill(new Rect(centre.x - 10, centre.y - 10, 20, 20), yellow);
+            GUI.matrix = matrix;
         }
 
         void DrawDiagnostics(float w, float h)
         {
             var r = new Rect(12, 12, Mathf.Min(560, w - 24), Mathf.Min(420, h - 24));
-            Fill(r, new Color(0, 0, 0, 0.75f));
-            var lines = m_World.DiagnosticsText();
-            GUI.Label(new Rect(r.x + 8, r.y + 6, r.width - 16, r.height - 12), lines, new GUIStyle(m_Text) { fontSize = 12 });
+            Box(r, new Color(0.06f, 0.06f, 0.08f, 0.85f), 10, new Color(1, 1, 1, 0.08f), 1);
+            GUI.Label(new Rect(r.x + 10, r.y + 8, r.width - 20, r.height - 16), m_World.DiagnosticsText(), Text(12, 400, Color.white, TextAnchor.UpperLeft, wrap: true));
         }
 
         // ---- Custom UI ----------------------------------------------------------------------
@@ -417,15 +583,10 @@ namespace Zimension.Unity
         GUIStyle TextStyle(Element e)
         {
             var s = e.Style;
-            var style = new GUIStyle(m_Text)
-            {
-                fontSize = Mathf.RoundToInt(s.Number("fontSize", e.Type == "text-box" ? 14 : 16)),
-                alignment = e.Type == "button" || s.Get("textAlign") == "center" ? TextAnchor.MiddleCenter : s.Get("textAlign") == "right" ? TextAnchor.UpperRight : TextAnchor.UpperLeft,
-                fontStyle = s.Get("fontWeight") == "bold" || s.Number("fontWeight", 400) >= 600 ? FontStyle.Bold : FontStyle.Normal,
-                wordWrap = true,
-            };
-            style.normal.textColor = s.Color("color", e.Type == "text-box" ? new Color(0.94f, 0.94f, 0.94f) : Color.white);
-            return style;
+            int weight = s.Get("fontWeight") == "bold" ? 700 : Mathf.RoundToInt(s.Number("fontWeight", 400));
+            var anchor = e.Type == "button" || s.Get("textAlign") == "center" ? TextAnchor.MiddleCenter : s.Get("textAlign") == "right" ? TextAnchor.UpperRight : TextAnchor.UpperLeft;
+            var color = s.Color("color", e.Type == "text-box" ? new Color(0.94f, 0.94f, 0.94f) : Color.white);
+            return Text(s.Number("fontSize", e.Type == "text-box" ? 14 : 16), weight, color, anchor, wrap: true);
         }
 
         Texture2D Image(string src) => !string.IsNullOrEmpty(src) && m_Images.TryGetValue(src, out var tex) ? tex : null;
@@ -440,7 +601,10 @@ namespace Zimension.Unity
             var previous = GUI.color;
             GUI.color = new Color(1, 1, 1, opacity);
             var background = s.Color("backgroundColor", e.Type == "button" ? new Color(23 / 255f, 169 / 255f, 0) : e.Type == "text-box" ? new Color(0.24f, 0.24f, 0.24f) : new Color(0, 0, 0, 0));
-            if (background.a > 0) Fill(rect, new Color(background.r, background.g, background.b, background.a * opacity));
+            float radius = Mathf.Min(s.Length("borderRadius", Mathf.Min(rect.width, rect.height), e.Type == "button" ? 10 : e.Type == "text-box" ? 4 : 0), Mathf.Min(rect.width, rect.height) / 2);
+            var borderColor = s.Color("borderColor", Color.clear);
+            float borderWidth = s.Length("borderWidth", 0, 0);
+            Box(rect, new Color(background.r, background.g, background.b, background.a * opacity), radius, WithOpacity(borderColor, opacity), borderWidth);
             bool clicked = false;
             switch (e.Type)
             {

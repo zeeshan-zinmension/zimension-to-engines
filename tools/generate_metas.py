@@ -21,6 +21,12 @@ def meta(rel, is_dir):
     if ext == ".cs":
         return (f"fileFormatVersion: 2\nguid: {g}\nMonoImporter:\n  externalObjects: {{}}\n  serializedVersion: 2\n"
                 "  defaultReferences: []\n  executionOrder: 0\n  icon: {instanceID: 0}\n  userData: \n  assetBundleName: \n  assetBundleVariant: \n")
+    if ext in (".ttf", ".otf"):
+        return (f"fileFormatVersion: 2\nguid: {g}\nTrueTypeFontImporter:\n  externalObjects: {{}}\n  serializedVersion: 4\n"
+                "  fontSize: 16\n  forceTextureCase: -2\n  characterSpacing: 0\n  characterPadding: 1\n  includeFontData: 1\n"
+                "  fontNames: []\n  fallbackFontReferences: []\n  customCharacters: \n  fontRenderingMode: 0\n"
+                "  ascentCalculationMode: 1\n  useLegacyBoundsCalculation: 0\n  shouldRoundAdvanceValue: 1\n"
+                "  userData: \n  assetBundleName: \n  assetBundleVariant: \n")
     if ext == ".asmdef":
         return f"fileFormatVersion: 2\nguid: {g}\nAssemblyDefinitionImporter:\n{TAIL}"
     if os.path.basename(rel) == "package.json":

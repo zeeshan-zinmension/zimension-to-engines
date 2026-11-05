@@ -39,7 +39,7 @@ namespace Zimension.Unity
 
         CharacterController m_Controller;
         Camera m_Camera;
-        Transform m_Model;
+        Transform m_Model, m_ModelPivot;
         float m_Yaw, m_Pitch;
         Vector3 m_Velocity;
         bool m_Grounded;
@@ -56,7 +56,7 @@ namespace Zimension.Unity
         readonly AnimationClipPlayable[] m_Clips = new AnimationClipPlayable[4];
         readonly bool[] m_HasClip = new bool[4];
         readonly float[] m_Weights = new float[4];
-        float m_LocomotionTime;
+        float m_LocomotionTime, m_JumpTime;
 
         public Camera PlayerCamera => m_Camera;
         public Vector3 Feet => transform.position;
@@ -91,27 +91,28 @@ namespace Zimension.Unity
 
         void SpawnAvatarModel(ZimensionProject project)
         {
-            var model = Instantiate(project.avatarPrefab, transform);
-            model.name = "Avatar";
+            // A pivot owns facing (turned toward travel); the model under it keeps its import pose plus
+            // the heading correction and scale, so animation never fights the controller.
+            var pivot = new GameObject("Avatar").transform;
+            pivot.SetParent(transform, false);
+            var model = Instantiate(project.avatarPrefab, pivot);
+            model.name = project.avatarPrefab.name;
             model.transform.localPosition = Vector3.zero;
             model.transform.localRotation = Quaternion.identity;
             foreach (var c in model.GetComponentsInChildren<Collider>(true)) c.enabled = false;
-            // Scale to the character height (characterHeight), feet on the capsule bottom.
-            var renderers = model.GetComponentsInChildren<Renderer>(true);
-            if (renderers.Length > 0)
+            // Like Avatar.normalizeRetargetedAvatarHeading: the model's forward from its anatomical
+            // left/right (upper arms), turned to face +Z.
+            if (AvatarMeasure.Forward(model.transform, out var forward))
+                model.transform.localRotation = Quaternion.FromToRotation(forward, Vector3.forward);
+            // characterHeight from the real rest-pose mesh (baked skinned vertices), feet on the capsule bottom.
+            if (AvatarMeasure.VerticalExtent(model.transform, pivot, out var low, out var high) && high - low > 0.01f)
             {
-                var b = renderers[0].bounds;
-                foreach (var r in renderers) b.Encapsulate(r.bounds);
-                float height = b.size.y;
-                if (height > 0.01f)
-                {
-                    float scale = Mathf.Clamp(project.avatarHeight, 0.2f, 10f) / height;
-                    model.transform.localScale *= scale;
-                    float feet = (b.min.y - transform.position.y) * scale;
-                    model.transform.localPosition = new Vector3(0, -feet, 0);
-                }
+                float scale = Mathf.Clamp(project.avatarHeight, 0.2f, 10f) / (high - low);
+                model.transform.localScale = model.transform.localScale * scale;
+                model.transform.localPosition = new Vector3(0, -low * scale, 0);
             }
-            m_Model = model.transform;
+            m_ModelPivot = pivot;
+            m_Model = pivot;
             var clips = new[] { project.idleClip, project.walkClip, project.runClip, project.jumpClip };
             bool any = false;
             foreach (var c in clips) any |= c;
@@ -203,7 +204,7 @@ namespace Zimension.Unity
             var horizontal = wish * speed;
             float gravity = Mathf.Abs(Physics.gravity.y) * GravityScale;
             if (m_Grounded && m_Velocity.y <= 0) m_Velocity.y = -2f; // keep contact on slopes and steps
-            if (m_Grounded && jump) { m_Velocity.y = jumpVelocity; m_Grounded = false; }
+            if (m_Grounded && jump) { m_Velocity.y = jumpVelocity; m_Grounded = false; m_JumpTime = 0; }
             m_Velocity.y -= gravity * dt;
             m_Velocity.x = horizontal.x; m_Velocity.z = horizontal.z;
             m_TouchingThisFrame.Clear();
@@ -263,9 +264,12 @@ namespace Zimension.Unity
         void Animate(float dt, bool moving, bool sprint)
         {
             if (!m_Graph.IsValid()) return;
-            int state = !m_Grounded && m_HasClip[3] ? 3 : moving ? (sprint && m_HasClip[2] ? 2 : m_HasClip[1] ? 1 : 0) : 0;
+            // Airborne for more than a moment (not just stepping off a kerb) plays the jump clip.
+            bool airborne = !m_Grounded && (m_JumpTime < 0.6f || m_Velocity.y < -3f);
+            int state = airborne && m_HasClip[3] ? 3 : moving ? (sprint && m_HasClip[2] ? 2 : m_HasClip[1] ? 1 : 0) : 0;
             if (!m_HasClip[state]) state = 0;
             m_LocomotionTime += dt;
+            m_JumpTime += dt;
             for (int i = 0; i < 4; i++)
             {
                 if (!m_HasClip[i]) continue;
@@ -273,7 +277,7 @@ namespace Zimension.Unity
                 m_Mixer.SetInputWeight(i, m_Weights[i]);
                 var clip = m_Clips[i].GetAnimationClip();
                 float length = clip ? Mathf.Max(0.01f, clip.length) : 1;
-                m_Clips[i].SetTime(i == 3 ? Mathf.Min(m_LocomotionTime, length) : Mathf.Repeat(m_LocomotionTime, length));
+                m_Clips[i].SetTime(i == 3 ? Mathf.Min(m_JumpTime, length) : Mathf.Repeat(m_LocomotionTime, length));
             }
             if (state != 3 && m_Weights[3] <= 0) { /* jump clip restarts on the next jump */ }
             m_Graph.Evaluate(0);

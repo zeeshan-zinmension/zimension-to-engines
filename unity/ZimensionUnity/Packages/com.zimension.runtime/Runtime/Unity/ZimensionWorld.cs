@@ -73,7 +73,7 @@ namespace Zimension.Unity
             BuildEventWorld();
             SetupCamera();
             SetupPlayer();
-            m_Hud = gameObject.GetComponent<ZimensionHud>() ?? gameObject.AddComponent<ZimensionHud>();
+            m_Hud = gameObject.GetOrAdd<ZimensionHud>();
             m_Hud.Configure(this, m_World, project, project.uiImages.Select(i => new KeyValuePair<string, Texture2D>(i.url, i.texture)));
             m_WorldBank = new SoundBank(gameObject, project.worldSounds, null, project.worldSoundSubtitles, positional: false);
             m_WorldBank.TrackFinished += track => m_Runtime.SoundTrackFinished(-1, track);
@@ -133,7 +133,7 @@ namespace Zimension.Unity
             }
             foreach (var item in all)
             {
-                var animator = item.GetComponent<ItemAnimator>() ?? item.gameObject.AddComponent<ItemAnimator>();
+                var animator = item.gameObject.GetOrAdd<ItemAnimator>();
                 animator.Build(item);
                 foreach (var w in animator.Warnings) Warn(w);
                 var e = new EventItem();

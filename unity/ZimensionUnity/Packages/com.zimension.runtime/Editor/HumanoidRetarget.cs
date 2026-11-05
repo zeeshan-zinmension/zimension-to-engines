@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using UnityEditor;
 using UnityEngine;
+using Zimension.Unity;
 using Object = UnityEngine.Object;
 
 namespace Zimension.Editor
@@ -216,7 +217,7 @@ namespace Zimension.Editor
             var existing = AssetDatabase.LoadAssetAtPath<Avatar>(path);
             if (existing) AssetDatabase.DeleteAsset(path);
             AssetDatabase.CreateAsset(avatar, path);
-            var animator = model.GetComponent<Animator>() ?? model.AddComponent<Animator>();
+            var animator = model.GetOrAdd<Animator>();
             animator.avatar = avatar;
             animator.applyRootMotion = false;
             return true;

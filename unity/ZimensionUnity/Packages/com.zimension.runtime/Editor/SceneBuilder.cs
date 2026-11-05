@@ -511,7 +511,15 @@ namespace Zimension.Editor
                         {
                             float ratio = e / a;
                             if (ratio < 0.8f || ratio > 1.25f) factor = ratio;
-                            Debug.Log($"[Zimension] Size check '{Path.GetFileName(assetPath)}': three.js {expected.X:0.###} x {expected.Y:0.###} x {expected.Z:0.###}, Unity {actual.x:0.###} x {actual.y:0.###} x {actual.z:0.###}" + (factor != 1f ? $" -> rescaled x{factor:0.####}" : ""));
+                            var detail = "";
+                            if (factor != 1f)
+                            {
+                                // What differs: each mesh node's scale in the model as Unity built it.
+                                var scales = model.GetComponentsInChildren<MeshFilter>(true).Take(4)
+                                    .Select(f => $"{f.name} {f.transform.lossyScale.x / Mathf.Max(1e-6f, model.lossyScale.x):0.###}" + (f.sharedMesh && f.sharedMesh.isReadable ? "" : " (bounds)"));
+                                detail = $" [mesh nodes: {string.Join(", ", scales)}]";
+                            }
+                            Debug.Log($"[Zimension] Size check '{Path.GetFileName(assetPath)}': three.js {expected.X:0.###} x {expected.Y:0.###} x {expected.Z:0.###}, Unity {actual.x:0.###} x {actual.y:0.###} x {actual.z:0.###}" + (factor != 1f ? $" -> rescaled x{factor:0.####}" : "") + detail);
                         }
                     }
                 }
@@ -536,6 +544,13 @@ namespace Zimension.Editor
                 var mesh = filter.sharedMesh;
                 if (!mesh || filter.name == "collider_mesh_zim") continue;
                 var m = toRoot * filter.transform.localToWorldMatrix;
+                // The real vertex positions when the mesh is readable (its stored bounds can be stale).
+                if (mesh.isReadable && mesh.vertexCount > 0)
+                {
+                    foreach (var v in mesh.vertices) { var p = m.MultiplyPoint3x4(v); min = Vector3.Min(min, p); max = Vector3.Max(max, p); }
+                    any = true;
+                    continue;
+                }
                 var b = mesh.bounds;
                 for (int c = 0; c < 8; c++)
                 {

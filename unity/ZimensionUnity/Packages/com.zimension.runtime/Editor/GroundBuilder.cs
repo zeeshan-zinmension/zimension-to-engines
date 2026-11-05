@@ -265,7 +265,8 @@ namespace Zimension.Editor
             var definition = FloorPreset(preset);
             var maps = PresetMaps(definition);
             var layer = new TerrainLayer { name = name };
-            layer.diffuseTexture = LoadTexture(ctx, maps.Str("diff")) ?? White(folder);
+            var diffuse = LoadTexture(ctx, maps.Str("diff"));
+            layer.diffuseTexture = diffuse ? diffuse : White(folder);
             var normal = LoadTexture(ctx, maps.Str("nor"));
             if (normal) { MarkNormalMap(normal); layer.normalMapTexture = normal; }
             layer.tileSize = tile;

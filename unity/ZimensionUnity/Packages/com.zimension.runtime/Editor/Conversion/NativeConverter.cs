@@ -405,7 +405,7 @@ namespace Zimension.Editor.Conversion
                 byName[w.name] = state;
                 if (w.clip) state.motion = WithLoop(ctx, humanoid && humanoidClips.TryGetValue(w.name, out var h) ? h : w.clip, w.loop);
                 state.speed = w.speed;
-                if (w.finished) { var b = state.AddStateMachineBehaviour<StateFinished>(); b.stateName = w.name; }
+                if (w.finished) AddFinished(ctx, state, w.name, zi);
             }
             var home = byName.TryGetValue(rest, out var r) ? r : restState;
             machine.defaultState = home;
@@ -416,7 +416,7 @@ namespace Zimension.Editor.Conversion
                 var back = byName[w.name].AddTransition(home);
                 back.hasExitTime = true; back.exitTime = 1; back.duration = 0.25f; back.hasFixedDuration = true;
             }
-            var animator = target.GetComponent<Animator>() ?? target.AddComponent<Animator>();
+            var animator = target.GetOrAdd<Animator>();
             animator.runtimeAnimatorController = controller;
             animator.applyRootMotion = false;
             animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
@@ -491,6 +491,14 @@ namespace Zimension.Editor.Conversion
                 }
             }
             s_PendingWeapons.Clear();
+        }
+
+        /// <summary>A State Finished behaviour on the state (reports its end to the object's Animation Events).</summary>
+        static void AddFinished(ZimensionImporter.Context ctx, AnimatorState state, string name, ZimensionItem zi)
+        {
+            var b = state.AddStateMachineBehaviour<StateFinished>();
+            if (b) { b.stateName = name; return; }
+            ctx.Report.Add(ImportReport.Level.Approximated, $"The finished event of '{name}' could not be attached (Unity did not find the StateFinished script)", "animations", zi.Json);
         }
 
         static void AddProcedural(ZimensionItem zi, EventCard card)
@@ -648,10 +656,10 @@ namespace Zimension.Editor.Conversion
                     AssetDatabase.CreateAsset(clip, AssetDatabase.GenerateUniqueAssetPath($"{clipFolder}/{ZimensionImporter.SafeName(clip.name)}.anim"));
                     state.motion = clip;
                 }
-                if (events) { var b = state.AddStateMachineBehaviour<StateFinished>(); b.stateName = names[t]; }
+                if (events) AddFinished(ctx, state, names[t], zi);
                 if (names[t] == rest) machine.defaultState = state;
             }
-            var animator = zi.gameObject.GetComponent<Animator>() ?? zi.gameObject.AddComponent<Animator>();
+            var animator = zi.gameObject.GetOrAdd<Animator>();
             animator.runtimeAnimatorController = controller;
             animator.applyRootMotion = false;
             animator.cullingMode = AnimatorCullingMode.AlwaysAnimate;
@@ -799,7 +807,7 @@ namespace Zimension.Editor.Conversion
                     model.transform.localPosition = new Vector3(0, -low * scale, 0);
                 }
                 p.avatar = pivot;
-                var animator = model.GetComponent<Animator>() ?? model.AddComponent<Animator>();
+                var animator = model.GetOrAdd<Animator>();
                 animator.applyRootMotion = false;
                 animator.runtimeAnimatorController = PlayerAnimator(ctx, p, model);
                 p.animator = animator;

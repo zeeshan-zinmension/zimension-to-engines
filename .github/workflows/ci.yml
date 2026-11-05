@@ -37,6 +37,8 @@ jobs:
         run: dotnet build tools/compile-check/Runtime.csproj
       - name: Compile Zimension.Editor as its own assembly against UnityEditor
         run: dotnet build tools/compile-check/Editor.csproj
+      - name: Unity rules (script file names, fake-null components)
+        run: python3 tools/compile-check/unity-rules.py
 
   unity:
     # Opens the template project in the pinned Unity editor, imports the sample export and builds a

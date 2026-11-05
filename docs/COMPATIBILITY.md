@@ -73,7 +73,7 @@ silently dropped: every case appears in the report.
 
 | | Version |
 |---|---|
-| Unity | 6.3 LTS, pinned 6000.3.28f1 (any 6000.3 patch should work) |
+| Unity | Any Unity 6 (6000.0 or newer); 6.3 LTS recommended. No version is pinned. |
 | URP | 17.3.0 |
 | glTFast | 6.20.0 (with Draco for Unity 5.6.0, KTX for Unity 3.8.0) |
 | Host / player | Windows x64 first; nothing in the package is Windows-specific |

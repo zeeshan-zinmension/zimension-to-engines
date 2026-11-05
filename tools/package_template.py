@@ -17,7 +17,7 @@ SKIP_EXT = {".csproj", ".sln", ".user"}
 README = """Zimension Unity project
 =======================
 
-1. Install Unity 6.3 LTS (6000.3.x) with Windows Build Support.
+1. Use any Unity 6 editor (6000.0 or newer; 6.3 LTS recommended) with Windows Build Support.
 2. Unzip this folder, then in Unity Hub choose Add > Add project from disk and pick ZimensionUnity.
    The first open downloads the pinned packages (internet needed once) and sets up URP,
    input handling and colour space.

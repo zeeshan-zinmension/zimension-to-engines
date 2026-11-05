@@ -66,6 +66,89 @@ namespace Zimension.Editor
             return false;
         }
 
+        /// <summary>
+        /// Size of the default scene's static meshes as three.js's GLTFLoader builds them: every
+        /// node's matrix or TRS down the hierarchy applied to its POSITION accessor's min/max (which
+        /// glTF requires), with KHR_mesh_quantization normalized integers scaled to [-1, 1]. False
+        /// when the file has no static mesh bounds to measure (skinned only, or min/max missing).
+        /// </summary>
+        public static bool SceneSize(JsonNode gltf, out System.Numerics.Vector3 size)
+        {
+            size = default;
+            var nodes = gltf["nodes"];
+            var scenes = gltf["scenes"];
+            var scene = scenes[gltf["scene"].IsNumber ? (int)gltf["scene"].AsNumber : 0];
+            if (!scene.IsObject) return false;
+            var min = new System.Numerics.Vector3(float.PositiveInfinity);
+            var max = new System.Numerics.Vector3(float.NegativeInfinity);
+            bool any = false;
+            void Visit(int index, System.Numerics.Matrix4x4 parent, int depth)
+            {
+                var node = nodes[index];
+                if (!node.IsObject || depth > 256) return;
+                var world = LocalMatrix(node) * parent;
+                if (node["mesh"].IsNumber && !node["skin"].IsNumber && node.Str("name") != "collider_mesh_zim")
+                    foreach (var primitive in gltf["meshes"][(int)node["mesh"].AsNumber]["primitives"].Items)
+                    {
+                        var accessor = gltf["accessors"][primitive["attributes"]["POSITION"].IsNumber ? (int)primitive["attributes"]["POSITION"].AsNumber : -1];
+                        if (!AccessorBounds(accessor, out var lo, out var hi)) continue;
+                        for (int c = 0; c < 8; c++)
+                        {
+                            var p = new System.Numerics.Vector3((c & 1) != 0 ? hi.X : lo.X, (c & 2) != 0 ? hi.Y : lo.Y, (c & 4) != 0 ? hi.Z : lo.Z);
+                            var w = System.Numerics.Vector3.Transform(p, world);
+                            min = System.Numerics.Vector3.Min(min, w);
+                            max = System.Numerics.Vector3.Max(max, w);
+                        }
+                        any = true;
+                    }
+                foreach (var child in node["children"].Items)
+                    if (child.IsNumber) Visit((int)child.AsNumber, world, depth + 1);
+            }
+            foreach (var root in scene["nodes"].Items)
+                if (root.IsNumber) Visit((int)root.AsNumber, System.Numerics.Matrix4x4.Identity, 0);
+            if (!any) return false;
+            size = max - min;
+            return JsonNode.IsFinite(size.X) && JsonNode.IsFinite(size.Y) && JsonNode.IsFinite(size.Z);
+        }
+
+        /// <summary>A node's local transform in the row-vector convention (v * M).</summary>
+        static System.Numerics.Matrix4x4 LocalMatrix(JsonNode node)
+        {
+            var m = node["matrix"];
+            if (m.IsArray && m.Count == 16)
+            {
+                var v = new float[16];
+                for (int i = 0; i < 16; i++) v[i] = m[i].IsNumber ? (float)m[i].AsNumber : (i % 5 == 0 ? 1 : 0);
+                // glTF matrices are column-major; read sequentially they are the row-vector form.
+                return new System.Numerics.Matrix4x4(v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], v[11], v[12], v[13], v[14], v[15]);
+            }
+            var t = node["translation"]; var r = node["rotation"]; var s = node["scale"];
+            var translation = t.Count == 3 ? new System.Numerics.Vector3((float)t[0].AsNumber, (float)t[1].AsNumber, (float)t[2].AsNumber) : System.Numerics.Vector3.Zero;
+            var rotation = r.Count == 4 ? System.Numerics.Quaternion.Normalize(new System.Numerics.Quaternion((float)r[0].AsNumber, (float)r[1].AsNumber, (float)r[2].AsNumber, (float)r[3].AsNumber)) : System.Numerics.Quaternion.Identity;
+            var scale = s.Count == 3 ? new System.Numerics.Vector3((float)s[0].AsNumber, (float)s[1].AsNumber, (float)s[2].AsNumber) : System.Numerics.Vector3.One;
+            return System.Numerics.Matrix4x4.CreateScale(scale) * System.Numerics.Matrix4x4.CreateFromQuaternion(rotation) * System.Numerics.Matrix4x4.CreateTranslation(translation);
+        }
+
+        static bool AccessorBounds(JsonNode accessor, out System.Numerics.Vector3 lo, out System.Numerics.Vector3 hi)
+        {
+            lo = hi = default;
+            var min = accessor["min"]; var max = accessor["max"];
+            if (!accessor.IsObject || min.Count < 3 || max.Count < 3) return false;
+            float divisor = 1;
+            if (accessor["normalized"].IsBool && accessor["normalized"].AsBool)
+                switch (accessor["componentType"].IsNumber ? (int)accessor["componentType"].AsNumber : 0)
+                {
+                    case 5120: divisor = 127; break;   // BYTE
+                    case 5121: divisor = 255; break;   // UNSIGNED_BYTE
+                    case 5122: divisor = 32767; break; // SHORT
+                    case 5123: divisor = 65535; break; // UNSIGNED_SHORT
+                }
+            float F(JsonNode n) => Math.Max((float)n.AsNumber / divisor, divisor > 1 ? -1f : float.NegativeInfinity);
+            lo = new System.Numerics.Vector3(F(min[0]), F(min[1]), F(min[2]));
+            hi = new System.Numerics.Vector3(F(max[0]), F(max[1]), F(max[2]));
+            return true;
+        }
+
         public static IEnumerable<string> RequiredExtensions(JsonNode gltf)
         {
             foreach (var e in gltf["extensionsRequired"].Items) if (e.IsString) yield return e.AsString;

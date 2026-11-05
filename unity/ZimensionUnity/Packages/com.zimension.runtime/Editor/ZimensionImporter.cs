@@ -65,6 +65,7 @@ namespace Zimension.Editor
             /// <summary>Every clip of every imported model and library (several libraries share clip names such as "Idle").</summary>
             public readonly List<AnimationClip> LibraryClips = new List<AnimationClip>();
             public readonly Dictionary<string, List<AnimationClip>> SourceClips = new Dictionary<string, List<AnimationClip>>(StringComparer.Ordinal); // bundle entry -> clips by index
+            public readonly Dictionary<string, float> SourceScale = new Dictionary<string, float>(StringComparer.Ordinal); // asset path -> size correction
             public readonly Dictionary<string, string> Retargeted = new Dictionary<string, string>(StringComparer.Ordinal);
             public ZimensionProject Project;
             public bool ShowProgress;

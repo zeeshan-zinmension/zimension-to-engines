@@ -351,6 +351,7 @@ namespace Zimension.Editor
             instance.transform.localRotation = Quaternion.identity;
             instance.transform.localScale = Vector3.one;
             zi.modelRoot = instance.transform;
+            MatchSourceSize(ctx, item, instance.transform, path);
             // A model's collider_mesh_zim node is collision only.
             foreach (var t in instance.GetComponentsInChildren<Transform>(true))
                 if (t.name == "collider_mesh_zim")
@@ -409,6 +410,66 @@ namespace Zimension.Editor
             ApplyCustomizations(ctx, item, instance);
             if (item.Has("rpmRetargetProfile")) ctx.Report.Add(ImportReport.Level.Approximated, "Ready Player Me retarget profile offsets are approximated by bone-name binding", "rpmRetargetProfile", item);
             return true;
+        }
+
+        /// <summary>
+        /// The web sizes a model by the glTF file as three.js reads it. When the imported prefab's
+        /// static meshes come out a different size (a glTF feature the importer reads differently),
+        /// the model is rescaled under the item so the item transform means the same thing in both
+        /// engines, and the difference is reported.
+        /// </summary>
+        static void MatchSourceSize(ZimensionImporter.Context ctx, JsonNode item, Transform model, string assetPath)
+        {
+            if (!ctx.SourceScale.TryGetValue(assetPath, out var factor))
+            {
+                factor = 1f;
+                try
+                {
+                    if (model.GetComponentsInChildren<SkinnedMeshRenderer>(true).Length == 0
+                        && GltfInfo.SceneSize(GltfInfo.ReadJson(File.ReadAllBytes(Path.GetFullPath(assetPath))), out var expected)
+                        && TryLocalMeshSize(model, out var actual))
+                    {
+                        float e = Math.Max(expected.X, Math.Max(expected.Y, expected.Z));
+                        float a = Mathf.Max(actual.x, Mathf.Max(actual.y, actual.z));
+                        if (e > 1e-6f && a > 1e-6f)
+                        {
+                            float ratio = e / a;
+                            if (ratio < 0.8f || ratio > 1.25f) factor = ratio;
+                            Debug.Log($"[Zimension] Size check '{Path.GetFileName(assetPath)}': three.js {expected.X:0.###} x {expected.Y:0.###} x {expected.Z:0.###}, Unity {actual.x:0.###} x {actual.y:0.###} x {actual.z:0.###}" + (factor != 1f ? $" -> rescaled x{factor:0.####}" : ""));
+                        }
+                    }
+                }
+                catch (Exception e) { Debug.LogWarning($"[Zimension] Could not size-check '{assetPath}': {e.Message}"); }
+                ctx.SourceScale[assetPath] = factor;
+                if (factor != 1f)
+                    ctx.Report.Add(ImportReport.Level.Approximated, $"Model '{Path.GetFileName(assetPath)}' imported at {1f / factor:0.##}x its size in Zimension; rescaled to match", "file", item);
+            }
+            if (factor != 1f) model.localScale = Vector3.one * factor;
+        }
+
+        /// <summary>Bounds of the model's static meshes in the model root's own space.</summary>
+        static bool TryLocalMeshSize(Transform model, out Vector3 size)
+        {
+            size = Vector3.zero;
+            var toRoot = model.worldToLocalMatrix;
+            var min = new Vector3(float.PositiveInfinity, float.PositiveInfinity, float.PositiveInfinity);
+            var max = -min;
+            bool any = false;
+            foreach (var filter in model.GetComponentsInChildren<MeshFilter>(true))
+            {
+                var mesh = filter.sharedMesh;
+                if (!mesh || filter.name == "collider_mesh_zim") continue;
+                var m = toRoot * filter.transform.localToWorldMatrix;
+                var b = mesh.bounds;
+                for (int c = 0; c < 8; c++)
+                {
+                    var p = m.MultiplyPoint3x4(new Vector3((c & 1) != 0 ? b.max.x : b.min.x, (c & 2) != 0 ? b.max.y : b.min.y, (c & 4) != 0 ? b.max.z : b.min.z));
+                    min = Vector3.Min(min, p); max = Vector3.Max(max, p);
+                }
+                any = true;
+            }
+            if (any) size = max - min;
+            return any;
         }
 
         /// <summary>
